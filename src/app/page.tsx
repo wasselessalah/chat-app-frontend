@@ -1,9 +1,11 @@
 import Link from "next/link";
+import { Navbar } from "@/components/navbar";
 
 export default function Home() {
   return (
-    <div className="flex min-h-screen flex-col items-center bg-white text-zinc-950 dark:bg-zinc-950 dark:text-zinc-50 font-sans">
-      <main className="flex-1 w-full flex flex-col items-center justify-center pt-24 pb-16 px-4 md:px-6">
+    <div className="flex min-h-screen flex-col items-center bg-white text-zinc-950 dark:bg-zinc-950 dark:text-zinc-50 font-sans w-full">
+      <Navbar />
+      <main className="flex-1 w-full flex flex-col items-center justify-center pt-16 pb-16 px-4 md:px-6">
         
         {/* Badge */}
         <div className="inline-flex items-center rounded-full border border-zinc-200 dark:border-zinc-800 bg-zinc-100/50 dark:bg-zinc-900/50 px-3 py-1 text-sm font-medium text-zinc-900 dark:text-zinc-200 transition-colors">
@@ -25,7 +27,7 @@ export default function Home() {
         {/* Action Buttons */}
         <div className="mt-8 flex flex-col sm:flex-row items-center gap-4">
           <Link
-            href="#"
+            href="/chat"
             className="inline-flex h-10 items-center justify-center rounded-md bg-zinc-900 dark:bg-zinc-50 px-8 text-sm font-medium text-zinc-50 dark:text-zinc-900 shadow transition-colors hover:bg-zinc-900/90 dark:hover:bg-zinc-50/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950 dark:focus-visible:ring-zinc-300 disabled:pointer-events-none disabled:opacity-50"
           >
             Start Chatting
