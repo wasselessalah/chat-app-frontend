@@ -25,7 +25,7 @@ export default function Home() {
         {/* Action Buttons */}
         <div className="mt-8 flex flex-col sm:flex-row items-center gap-4">
           <Link
-            href="#"
+            href="/chat"
             className="inline-flex h-10 items-center justify-center rounded-md bg-zinc-900 dark:bg-zinc-50 px-8 text-sm font-medium text-zinc-50 dark:text-zinc-900 shadow transition-colors hover:bg-zinc-900/90 dark:hover:bg-zinc-50/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950 dark:focus-visible:ring-zinc-300 disabled:pointer-events-none disabled:opacity-50"
           >
             Start Chatting
