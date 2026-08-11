@@ -29,7 +29,7 @@ export function ChatArea({ conversation, onToggleDetails }: ChatAreaProps) {
   if (!otherUser) return null;
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-background">
+    <div className="flex-1  min-h-9/12   flex flex-col  bg-background">
       {/* Header */}
       <div className="h-16 border-b flex items-center justify-between px-6 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="flex items-center gap-4">

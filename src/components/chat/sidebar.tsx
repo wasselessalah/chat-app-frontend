@@ -1,19 +1,19 @@
+"use client";
+
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { mockConversations, currentUser } from "@/lib/mock-data";
-import { Conversation } from "@/types/chat";
 import { Search, Edit } from "lucide-react";
+import Link from "next/link";
+import { useParams } from "next/navigation";
 
-interface SidebarProps {
-  selectedConversation: Conversation | null;
-  onSelectConversation: (conversation: Conversation) => void;
-}
+export function Sidebar() {
+  const params = useParams();
+  const selectedId = params.chatId as string;
 
-export function Sidebar({ selectedConversation, onSelectConversation }: SidebarProps) {
   return (
-    <div className="w-80 border-r bg-muted/30 flex flex-col h-full">
+    <div className="w-80 border-r min-h-9/12 bg-muted/30 flex flex-col  shrink-0">
       <div className="p-4 flex items-center justify-between border-b">
         <div className="flex items-center gap-3">
           <Avatar>
@@ -47,12 +47,12 @@ export function Sidebar({ selectedConversation, onSelectConversation }: SidebarP
             const otherUser = conv.participants.find((p) => p.id !== currentUser.id);
             if (!otherUser) return null;
 
-            const isSelected = selectedConversation?.id === conv.id;
+            const isSelected = selectedId === conv.id;
 
             return (
-              <button
+              <Link
+                href={`/chat/${conv.id}`}
                 key={conv.id}
-                onClick={() => onSelectConversation(conv)}
                 className={`flex items-center gap-3 p-3 rounded-lg transition-colors text-left ${
                   isSelected ? "bg-primary/10" : "hover:bg-muted"
                 }`}
@@ -84,7 +84,7 @@ export function Sidebar({ selectedConversation, onSelectConversation }: SidebarP
                     )}
                   </div>
                 </div>
-              </button>
+              </Link>
             );
           })}
         </div>
