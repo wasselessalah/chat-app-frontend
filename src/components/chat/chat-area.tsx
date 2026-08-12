@@ -31,6 +31,7 @@ export function ChatArea({ conversation, onToggleDetails }: ChatAreaProps) {
   // Handle Socket.IO connections and events
   useEffect(() => {
     const socket = getSocket();
+    if (!socket) return;
     
     // Fetch historical messages from backend
     const fetchMessages = async () => {
@@ -177,7 +178,9 @@ export function ChatArea({ conversation, onToggleDetails }: ChatAreaProps) {
             
             // Send to backend
             const socket = getSocket();
-            socket.emit("send_message", messageData);
+            if (socket) {
+              socket.emit("send_message", messageData);
+            }
 
             setInputValue("");
           }}

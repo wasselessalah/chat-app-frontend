@@ -50,16 +50,31 @@ export function Sidebar() {
       </div>
 
       <div className="p-4">
-        <div className="relative">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search users..."
-            className="pl-8 bg-background"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
+        <form 
+          className="flex items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            // Search is already filtered by onChange, but user wants a button
+          }}
+        >
+          <div className="relative flex-1">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Search users..."
+              className="pl-8 bg-background"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <button 
+            type="submit"
+            className="p-2 bg-primary/10 hover:bg-primary/20 text-primary rounded-md transition-colors"
+            title="Search"
+          >
+            <Search className="w-4 h-4" />
+          </button>
+        </form>
       </div>
 
       <ScrollArea className="flex-1">
