@@ -3,10 +3,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { mockMessages, currentUser } from "@/lib/mock-data";
+import { currentUser } from "@/lib/mock-data";
 import { Conversation } from "@/types/chat";
 import { Info, MoreVertical, Phone, Send, Video } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
+import { getSocket } from "@/lib/socket";
 
 interface ChatAreaProps {
   conversation: Conversation;
@@ -15,16 +16,60 @@ interface ChatAreaProps {
 
 export function ChatArea({ conversation, onToggleDetails }: ChatAreaProps) {
   const [inputValue, setInputValue] = useState("");
-  const messages = mockMessages[conversation.id] || [];
+  const [messages, setMessages] = useState<any[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const otherUser = conversation.participants.find((p) => p.id !== currentUser.id);
 
+  // Auto-scroll when messages change
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, conversation.id]);
+
+  // Handle Socket.IO connections and events
+  useEffect(() => {
+    const socket = getSocket();
+    
+    // Fetch historical messages from backend
+    const fetchMessages = async () => {
+      try {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000"}/api/messages?chatId=${conversation.id}`);
+        if (res.ok) {
+          const data = await res.json();
+          // Format timestamps if necessary, backend provides ISO strings
+          const formattedData = data.map((msg: any) => ({
+            ...msg,
+            timestamp: new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          }));
+          setMessages(formattedData);
+        }
+      } catch (error) {
+        console.error("Error fetching messages:", error);
+      }
+    };
+    
+    fetchMessages();
+    
+    socket.emit("join_chat", conversation.id);
+
+    const handleReceiveMessage = (newMessage: any) => {
+      if (newMessage.chatId === conversation.id) {
+        setMessages((prev) => {
+          // Prevent duplicates if already added locally
+          if (prev.find(m => m.id === newMessage.id)) return prev;
+          return [...prev, newMessage];
+        });
+      }
+    };
+
+    socket.on("receive_message", handleReceiveMessage);
+
+    return () => {
+      socket.off("receive_message", handleReceiveMessage);
+    };
+  }, [conversation.id]);
 
   if (!otherUser) return null;
 
@@ -117,8 +162,23 @@ export function ChatArea({ conversation, onToggleDetails }: ChatAreaProps) {
           onSubmit={(e) => {
             e.preventDefault();
             if (!inputValue.trim()) return;
-            // Here you would typically send the message
-            console.log("Sending:", inputValue);
+            
+            const messageData = {
+              id: Date.now().toString(), // local id, backend might replace it
+              content: inputValue,
+              senderId: currentUser.id,
+              senderName: currentUser.name,
+              chatId: conversation.id,
+              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+            
+            // Add locally instantly for better UX
+            setMessages((prev) => [...prev, messageData]);
+            
+            // Send to backend
+            const socket = getSocket();
+            socket.emit("send_message", messageData);
+
             setInputValue("");
           }}
         >

@@ -3,7 +3,8 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { mockConversations, currentUser } from "@/lib/mock-data";
+import { authClient } from "@/lib/auth-client";
+import { useEffect, useState } from "react";
 import { Search, Edit } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -11,6 +12,24 @@ import { useParams } from "next/navigation";
 export function Sidebar() {
   const params = useParams();
   const selectedId = params.chatId as string;
+  const { data: session } = authClient.useSession();
+  const currentUser = session?.user;
+  
+  const [users, setUsers] = useState<any[]>([]);
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    fetch("/api/users")
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setUsers(data.filter((u) => u.id !== currentUser?.id));
+        }
+      })
+      .catch((err) => console.error("Error fetching users:", err));
+  }, [currentUser?.id]);
+
+  if (!currentUser) return <div className="w-80 border-r min-h-9/12 bg-muted/30 p-4">Loading...</div>;
 
   return (
     <div className="w-80 border-r min-h-9/12 bg-muted/30 flex flex-col  shrink-0">
@@ -35,53 +54,45 @@ export function Sidebar() {
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="Search messages..."
+            placeholder="Search users..."
             className="pl-8 bg-background"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
           />
         </div>
       </div>
 
       <ScrollArea className="flex-1">
         <div className="flex flex-col gap-1 p-2">
-          {mockConversations.map((conv) => {
-            const otherUser = conv.participants.find((p) => p.id !== currentUser.id);
-            if (!otherUser) return null;
-
-            const isSelected = selectedId === conv.id;
+          {users
+            .filter((u) => u.name.toLowerCase().includes(search.toLowerCase()))
+            .map((otherUser) => {
+            // Generate a deterministic chat ID based on both user IDs
+            const chatId = [currentUser.id, otherUser.id].sort().join("-");
+            const isSelected = selectedId === chatId;
 
             return (
               <Link
-                href={`/chat/${conv.id}`}
-                key={conv.id}
+                href={`/chat/${chatId}`}
+                key={otherUser.id}
                 className={`flex items-center gap-3 p-3 rounded-lg transition-colors text-left ${
                   isSelected ? "bg-primary/10" : "hover:bg-muted"
                 }`}
               >
                 <div className="relative">
                   <Avatar>
-                    <AvatarImage src={otherUser.avatar} alt={otherUser.name} />
-                    <AvatarFallback>{otherUser.name.substring(0, 2)}</AvatarFallback>
+                    <AvatarImage src={otherUser.image || ""} alt={otherUser.name} />
+                    <AvatarFallback>{otherUser.name.substring(0, 2).toUpperCase()}</AvatarFallback>
                   </Avatar>
-                  {otherUser.status === "online" && (
-                    <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-background rounded-full" />
-                  )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
                     <span className="font-medium text-sm truncate">{otherUser.name}</span>
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">
-                      {conv.lastMessage?.timestamp}
-                    </span>
                   </div>
                   <div className="flex items-center justify-between mt-1">
                     <span className="text-sm text-muted-foreground truncate pr-2">
-                      {conv.lastMessage?.content}
+                      Start chatting...
                     </span>
-                    {conv.unreadCount > 0 && (
-                      <span className="flex items-center justify-center w-5 h-5 bg-primary text-primary-foreground text-[10px] font-medium rounded-full shrink-0">
-                        {conv.unreadCount}
-                      </span>
-                    )}
                   </div>
                 </div>
               </Link>
