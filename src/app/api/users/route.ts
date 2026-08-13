@@ -1,20 +1,33 @@
-import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
 
-const prisma = new PrismaClient();
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const query = searchParams.get("q") ?? "";
+  const excludeId = searchParams.get("excludeId") ?? undefined;
 
-export async function GET() {
   try {
     const users = await prisma.user.findMany({
+      where: {
+        AND: [
+          excludeId ? { id: { not: excludeId } } : {},
+          query
+            ? {
+                OR: [
+                  { name: { contains: query, mode: "insensitive" } },
+                  { email: { contains: query, mode: "insensitive" } },
+                ],
+              }
+            : {},
+        ],
+      },
       select: {
         id: true,
         name: true,
         email: true,
         image: true,
       },
-      orderBy: {
-        name: "asc",
-      },
+      orderBy: { name: "asc" },
     });
 
     return NextResponse.json(users);

@@ -4,12 +4,14 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
+import { disconnectSocket } from "@/lib/socket";
 
 export function Navbar() {
   const { data: session, isPending } = authClient.useSession();
   const router = useRouter();
 
   const handleLogout = async () => {
+    disconnectSocket();
     await authClient.signOut();
     router.push("/");
   };
