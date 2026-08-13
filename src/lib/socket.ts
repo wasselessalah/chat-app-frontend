@@ -37,3 +37,10 @@ export const getSocket = (userId?: string): Socket | null => {
 
   return socket;
 };
+
+export const disconnectSocket = () => {
+  if (socket) {
+    socket.disconnect();
+    socket = null;
+  }
+};
