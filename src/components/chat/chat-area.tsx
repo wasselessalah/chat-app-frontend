@@ -8,6 +8,7 @@ import { ChatUser, Conversation } from "@/types/chat";
 import { Info, MoreVertical, Phone, Send, Video } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { getSocket } from "@/lib/socket";
+import { useOnlineUsers } from "@/hooks/useOnlineUsers";
 
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
@@ -30,6 +31,9 @@ export function ChatArea({
   const otherUser = conversation.participants.find(
     (p) => p.id !== currentUser.id
   );
+
+  const onlineUserIds = useOnlineUsers();
+  const isOnline = otherUser ? onlineUserIds.has(otherUser.id) : false;
 
   // Auto-scroll when messages change
   useEffect(() => {
@@ -119,20 +123,29 @@ export function ChatArea({
       {/* Header */}
       <div className="h-16 border-b flex items-center justify-between px-6 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 shrink-0">
         <div className="flex items-center gap-4">
-          <Avatar className="h-10 w-10">
-            <AvatarImage
-              src={getAvatar(otherUser)}
-              alt={getDisplayName(otherUser)}
-            />
-            <AvatarFallback>
-              {getDisplayName(otherUser).substring(0, 2).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
+          <div className="relative">
+            <Avatar className="h-10 w-10">
+              <AvatarImage
+                src={getAvatar(otherUser)}
+                alt={getDisplayName(otherUser)}
+              />
+              <AvatarFallback>
+                {getDisplayName(otherUser).substring(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            {isOnline && (
+              <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-background rounded-full"></span>
+            )}
+          </div>
           <div>
             <h2 className="font-semibold">{getDisplayName(otherUser)}</h2>
             <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-muted-foreground" />
-              {otherUser.email || ""}
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  isOnline ? "bg-green-500" : "bg-muted-foreground"
+                }`}
+              />
+              {isOnline ? "Online" : otherUser.email || "Offline"}
             </p>
           </div>
         </div>

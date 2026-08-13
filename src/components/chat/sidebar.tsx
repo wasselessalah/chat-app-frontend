@@ -8,6 +8,7 @@ import { useEffect, useState, useCallback } from "react";
 import { Search, Edit, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useOnlineUsers } from "@/hooks/useOnlineUsers";
 
 interface AppUser {
   id: string;
@@ -25,6 +26,9 @@ export function Sidebar() {
   const [users, setUsers] = useState<AppUser[]>([]);
   const [search, setSearch] = useState("");
   const [isSearching, setIsSearching] = useState(false);
+
+  // Hook to get online users (also announces our presence)
+  const onlineUserIds = useOnlineUsers(currentUser?.id);
 
   // Fetch users (with optional search query)
   const fetchUsers = useCallback(
@@ -131,6 +135,7 @@ export function Sidebar() {
               .sort()
               .join("_vs_");
             const isSelected = selectedId === chatId;
+            const isOnline = onlineUserIds.has(otherUser.id);
 
             return (
               <Link
@@ -142,15 +147,20 @@ export function Sidebar() {
                     : "hover:bg-muted text-foreground"
                 }`}
               >
-                <Avatar>
-                  <AvatarImage
-                    src={otherUser.image ?? ""}
-                    alt={otherUser.name}
-                  />
-                  <AvatarFallback>
-                    {otherUser.name.substring(0, 2).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
+                <div className="relative">
+                  <Avatar>
+                    <AvatarImage
+                      src={otherUser.image ?? ""}
+                      alt={otherUser.name}
+                    />
+                    <AvatarFallback>
+                      {otherUser.name.substring(0, 2).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  {isOnline && (
+                    <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-background rounded-full"></span>
+                  )}
+                </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-sm truncate">{otherUser.name}</p>
                 </div>
