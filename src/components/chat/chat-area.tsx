@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChatUser, Conversation } from "@/types/chat";
-import { Info, MoreVertical, Phone, Send, Video } from "lucide-react";
+import { Info, MoreVertical, Phone, Send, Video, Check, CheckCheck } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { getSocket } from "@/lib/socket";
 import { useOnlineUsers } from "@/hooks/useOnlineUsers";
@@ -63,6 +63,12 @@ export function ChatArea({
             }),
           }));
           setMessages(formattedData);
+          
+          // Once loaded, mark them as read
+          socket.emit("mark_messages_read", {
+            chatId: conversation.id,
+            readerId: currentUser.id,
+          });
         }
       } catch (error) {
         console.error("Error fetching messages:", error);
@@ -83,15 +89,35 @@ export function ChatArea({
             ).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
           },
         ]);
+
+        // If someone else sent it and we just received it, mark it as read immediately
+        if (newMessage.senderId !== currentUser.id) {
+          socket.emit("mark_messages_read", {
+            chatId: conversation.id,
+            readerId: currentUser.id,
+          });
+        }
+      }
+    };
+
+    const handleMessagesRead = ({ chatId, readerId }: any) => {
+      if (chatId === conversation.id && readerId !== currentUser.id) {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.senderId === currentUser.id ? { ...msg, isRead: true } : msg
+          )
+        );
       }
     };
 
     socket.on("receive_message", handleReceiveMessage);
+    socket.on("messages_read", handleMessagesRead);
 
     return () => {
       socket.off("receive_message", handleReceiveMessage);
+      socket.off("messages_read", handleMessagesRead);
     };
-  }, [conversation.id]);
+  }, [conversation.id, currentUser.id]);
 
   const getDisplayName = (user: ChatUser) => user.name || "Unknown";
   const getAvatar = (user: ChatUser) => user.image || user.avatar || "";
@@ -102,9 +128,6 @@ export function ChatArea({
     e.preventDefault();
     if (!inputValue.trim()) return;
 
-    // Emit to backend — socket handler saves to DB then broadcasts
-    // receive_message back to all room members (including sender),
-    // so we do NOT add locally here to avoid showing the message twice.
     const socket = getSocket();
     if (socket) {
       socket.emit("send_message", {
@@ -228,9 +251,20 @@ export function ChatArea({
                   >
                     <p className="text-sm">{msg.content}</p>
                   </div>
-                  <span className="text-[10px] text-muted-foreground mt-1 px-1">
-                    {msg.timestamp}
-                  </span>
+                  <div className="flex items-center gap-1 mt-1 px-1">
+                    <span className="text-[10px] text-muted-foreground">
+                      {msg.timestamp}
+                    </span>
+                    {isMe && (
+                      <span className="text-muted-foreground">
+                        {msg.isRead ? (
+                          <CheckCheck className="w-3 h-3 text-blue-500" />
+                        ) : (
+                          <Check className="w-3 h-3" />
+                        )}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             );
