@@ -9,6 +9,7 @@ import { Search, Edit, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useOnlineUsers } from "@/hooks/useOnlineUsers";
+import { getSocket } from "@/lib/socket";
 
 interface AppUser {
   id: string;
@@ -26,6 +27,10 @@ export function Sidebar() {
   const [users, setUsers] = useState<AppUser[]>([]);
   const [search, setSearch] = useState("");
   const [isSearching, setIsSearching] = useState(false);
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+
+  const BACKEND_URL =
+    process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
 
   // Hook to get online users (also announces our presence)
   const onlineUserIds = useOnlineUsers(currentUser?.id);
@@ -56,10 +61,27 @@ export function Sidebar() {
     [currentUser?.id]
   );
 
+  // Fetch initial unread counts
+  const fetchUnreadCounts = useCallback(async () => {
+    if (!currentUser?.id) return;
+    try {
+      const res = await fetch(
+        `${BACKEND_URL}/api/messages/unread-counts?userId=${currentUser.id}`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setUnreadCounts(data);
+      }
+    } catch (err) {
+      console.error("Error fetching unread counts:", err);
+    }
+  }, [currentUser?.id, BACKEND_URL]);
+
   // Initial load
   useEffect(() => {
     fetchUsers("");
-  }, [fetchUsers]);
+    fetchUnreadCounts();
+  }, [fetchUsers, fetchUnreadCounts]);
 
   // Debounced search
   useEffect(() => {
@@ -68,6 +90,47 @@ export function Sidebar() {
     }, 300);
     return () => clearTimeout(timer);
   }, [search, fetchUsers]);
+
+  // Handle incoming messages for unread counter
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket || !currentUser) return;
+
+    const handleReceiveMessage = (newMessage: any) => {
+      // If we received a message from someone else
+      if (newMessage.senderId !== currentUser.id) {
+        // Only increment if we are NOT currently in that chat room
+        if (selectedId !== newMessage.chatId) {
+          setUnreadCounts((prev) => ({
+            ...prev,
+            [newMessage.senderId]: (prev[newMessage.senderId] || 0) + 1,
+          }));
+        }
+      }
+    };
+
+    socket.on("receive_message", handleReceiveMessage);
+    return () => {
+      socket.off("receive_message", handleReceiveMessage);
+    };
+  }, [selectedId, currentUser]);
+
+  // Clear unread count when opening a chat
+  useEffect(() => {
+    if (selectedId && currentUser) {
+      // Find the other user ID from the selected chatId
+      const otherUserId = selectedId
+        .split("_vs_")
+        .find((id) => id !== currentUser.id);
+
+      if (otherUserId && unreadCounts[otherUserId]) {
+        setUnreadCounts((prev) => ({
+          ...prev,
+          [otherUserId]: 0,
+        }));
+      }
+    }
+  }, [selectedId, currentUser, unreadCounts]);
 
   if (!currentUser) {
     return (
@@ -136,6 +199,7 @@ export function Sidebar() {
               .join("_vs_");
             const isSelected = selectedId === chatId;
             const isOnline = onlineUserIds.has(otherUser.id);
+            const unreadCount = unreadCounts[otherUser.id] || 0;
 
             return (
               <Link
@@ -164,6 +228,11 @@ export function Sidebar() {
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-sm truncate">{otherUser.name}</p>
                 </div>
+                {unreadCount > 0 && (
+                  <div className="flex items-center justify-center min-w-5 h-5 px-1.5 text-[10px] font-bold text-primary-foreground bg-primary rounded-full">
+                    {unreadCount}
+                  </div>
+                )}
               </Link>
             );
           })}
