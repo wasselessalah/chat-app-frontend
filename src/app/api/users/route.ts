@@ -27,10 +27,58 @@ export async function GET(req: NextRequest) {
         email: true,
         image: true,
       },
-      orderBy: { name: "asc" },
     });
 
-    return NextResponse.json(users);
+    let messagesByOtherUser: Record<
+      string,
+      { content: string; createdAt: Date; senderId: string }
+    > = {};
+
+    if (excludeId) {
+      const recentMessages = await prisma.message.findMany({
+        where: {
+          chatId: {
+            contains: excludeId,
+          },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+
+      for (const msg of recentMessages) {
+        const parts = msg.chatId.split("_vs_");
+        const otherId = parts.find((id) => id !== excludeId);
+        if (otherId && !messagesByOtherUser[otherId]) {
+          messagesByOtherUser[otherId] = {
+            content: msg.content,
+            createdAt: msg.createdAt,
+            senderId: msg.senderId,
+          };
+        }
+      }
+    }
+
+    const usersWithLastMessage = users.map((user) => ({
+      ...user,
+      lastMessage: messagesByOtherUser[user.id] || null,
+    }));
+
+    usersWithLastMessage.sort((a, b) => {
+      const timeA = a.lastMessage
+        ? new Date(a.lastMessage.createdAt).getTime()
+        : 0;
+      const timeB = b.lastMessage
+        ? new Date(b.lastMessage.createdAt).getTime()
+        : 0;
+
+      if (timeA !== timeB) {
+        return timeB - timeA;
+      }
+      return a.name.localeCompare(b.name);
+    });
+
+    return NextResponse.json(usersWithLastMessage);
   } catch (error) {
     console.error("Error fetching users:", error);
     return NextResponse.json(
@@ -39,3 +87,4 @@ export async function GET(req: NextRequest) {
     );
   }
 }
+
