@@ -11,11 +11,70 @@ import { useParams } from "next/navigation";
 import { useOnlineUsers } from "@/hooks/useOnlineUsers";
 import { getSocket } from "@/lib/socket";
 
+interface LastMessage {
+  content: string;
+  createdAt: string;
+  senderId: string;
+}
+
 interface AppUser {
   id: string;
   name: string;
   email: string;
   image: string | null;
+  lastMessage?: LastMessage | null;
+}
+
+function formatMessageTime(dateString?: string | Date) {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  const now = new Date();
+
+  const isToday =
+    date.getDate() === now.getDate() &&
+    date.getMonth() === now.getMonth() &&
+    date.getFullYear() === now.getFullYear();
+
+  if (isToday) {
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday =
+    date.getDate() === yesterday.getDate() &&
+    date.getMonth() === yesterday.getMonth() &&
+    date.getFullYear() === yesterday.getFullYear();
+
+  if (isYesterday) {
+    return "Yesterday";
+  }
+
+  if (date.getFullYear() === now.getFullYear()) {
+    return date.toLocaleDateString([], { month: "short", day: "numeric" });
+  }
+
+  return date.toLocaleDateString([], {
+    month: "numeric",
+    day: "numeric",
+    year: "2-digit",
+  });
+}
+
+function sortUsers(userList: AppUser[]): AppUser[] {
+  return [...userList].sort((a, b) => {
+    const timeA = a.lastMessage
+      ? new Date(a.lastMessage.createdAt).getTime()
+      : 0;
+    const timeB = b.lastMessage
+      ? new Date(b.lastMessage.createdAt).getTime()
+      : 0;
+
+    if (timeA !== timeB) {
+      return timeB - timeA;
+    }
+    return a.name.localeCompare(b.name);
+  });
 }
 
 export function Sidebar() {
@@ -50,7 +109,7 @@ export function Sidebar() {
         if (!res.ok) throw new Error("Failed to fetch users");
         const data = await res.json();
         if (Array.isArray(data)) {
-          setUsers(data);
+          setUsers(sortUsers(data));
         }
       } catch (err) {
         console.error("Error fetching users:", err);
@@ -91,7 +150,7 @@ export function Sidebar() {
     return () => clearTimeout(timer);
   }, [search, fetchUsers]);
 
-  // Handle incoming messages for unread counter
+  // Handle incoming messages for unread counter & live sidebar update / re-sorting
   useEffect(() => {
     const socket = getSocket();
     if (!socket || !currentUser) return;
@@ -106,6 +165,32 @@ export function Sidebar() {
             [newMessage.senderId]: (prev[newMessage.senderId] || 0) + 1,
           }));
         }
+      }
+
+      // Update user lastMessage and re-sort sidebar
+      const otherUserId = newMessage.chatId
+        ? newMessage.chatId
+            .split("_vs_")
+            .find((id: string) => id !== currentUser.id)
+        : null;
+
+      if (otherUserId) {
+        setUsers((prevUsers) => {
+          const updated = prevUsers.map((user) => {
+            if (user.id === otherUserId) {
+              return {
+                ...user,
+                lastMessage: {
+                  content: newMessage.content,
+                  createdAt: newMessage.createdAt || new Date().toISOString(),
+                  senderId: newMessage.senderId,
+                },
+              };
+            }
+            return user;
+          });
+          return sortUsers(updated);
+        });
       }
     };
 
@@ -200,6 +285,7 @@ export function Sidebar() {
             const isSelected = selectedId === chatId;
             const isOnline = onlineUserIds.has(otherUser.id);
             const unreadCount = unreadCounts[otherUser.id] || 0;
+            const lastMsg = otherUser.lastMessage;
 
             return (
               <Link
@@ -211,7 +297,7 @@ export function Sidebar() {
                     : "hover:bg-muted text-foreground"
                 }`}
               >
-                <div className="relative">
+                <div className="relative shrink-0">
                   <Avatar>
                     <AvatarImage
                       src={otherUser.image ?? ""}
@@ -226,10 +312,22 @@ export function Sidebar() {
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm truncate">{otherUser.name}</p>
+                  <div className="flex items-center justify-between gap-1">
+                    <p className="font-medium text-sm truncate">{otherUser.name}</p>
+                    {lastMsg && (
+                      <span className="text-[11px] text-muted-foreground shrink-0">
+                        {formatMessageTime(lastMsg.createdAt)}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground truncate mt-0.5">
+                    {lastMsg
+                      ? `${lastMsg.senderId === currentUser.id ? "You: " : ""}${lastMsg.content}`
+                      : "No messages yet"}
+                  </p>
                 </div>
                 {unreadCount > 0 && (
-                  <div className="flex items-center justify-center min-w-5 h-5 px-1.5 text-[10px] font-bold text-primary-foreground bg-primary rounded-full">
+                  <div className="flex items-center justify-center min-w-5 h-5 px-1.5 text-[10px] font-bold text-primary-foreground bg-primary rounded-full shrink-0">
                     {unreadCount}
                   </div>
                 )}
@@ -241,3 +339,4 @@ export function Sidebar() {
     </div>
   );
 }
+
