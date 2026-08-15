@@ -5,7 +5,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChatUser, Conversation } from "@/types/chat";
-import { Info, MoreVertical, Phone, Send, Video, Check, CheckCheck } from "lucide-react";
+import {
+  Info,
+  MoreVertical,
+  Phone,
+  Send,
+  Video,
+  Check,
+  CheckCheck,
+  Pencil,
+  X,
+} from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { getSocket } from "@/lib/socket";
 import { useOnlineUsers } from "@/hooks/useOnlineUsers";
@@ -26,6 +36,8 @@ export function ChatArea({
 }: ChatAreaProps) {
   const [inputValue, setInputValue] = useState("");
   const [messages, setMessages] = useState<any[]>([]);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const otherUser = conversation.participants.find(
@@ -63,7 +75,7 @@ export function ChatArea({
             }),
           }));
           setMessages(formattedData);
-          
+
           // Once loaded, mark them as read
           socket.emit("mark_messages_read", {
             chatId: conversation.id,
@@ -110,12 +122,30 @@ export function ChatArea({
       }
     };
 
+    const handleMessageUpdated = (updatedMsg: any) => {
+      if (updatedMsg.chatId === conversation.id) {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === updatedMsg.id
+              ? {
+                  ...msg,
+                  content: updatedMsg.content,
+                  isEdited: true,
+                }
+              : msg
+          )
+        );
+      }
+    };
+
     socket.on("receive_message", handleReceiveMessage);
     socket.on("messages_read", handleMessagesRead);
+    socket.on("message_updated", handleMessageUpdated);
 
     return () => {
       socket.off("receive_message", handleReceiveMessage);
       socket.off("messages_read", handleMessagesRead);
+      socket.off("message_updated", handleMessageUpdated);
     };
   }, [conversation.id, currentUser.id]);
 
@@ -139,6 +169,31 @@ export function ChatArea({
     }
 
     setInputValue("");
+  };
+
+  const handleStartEdit = (msg: any) => {
+    setEditingMessageId(msg.id);
+    setEditingText(msg.content);
+  };
+
+  const handleSaveEdit = (messageId: string) => {
+    if (!editingText.trim()) return;
+
+    const socket = getSocket();
+    if (socket) {
+      socket.emit("update_message", {
+        messageId,
+        content: editingText.trim(),
+        senderId: currentUser.id,
+      });
+    }
+    setEditingMessageId(null);
+    setEditingText("");
+  };
+
+  const handleCancelEdit = () => {
+    setEditingMessageId(null);
+    setEditingText("");
   };
 
   return (
@@ -224,10 +279,20 @@ export function ChatArea({
             const showAvatar =
               idx === 0 || messages[idx - 1].senderId !== msg.senderId;
 
+            // Check if message is editable (less than 5 minutes old)
+            const isEditable =
+              isMe &&
+              msg.createdAt &&
+              Date.now() - new Date(msg.createdAt).getTime() < 5 * 60 * 1000;
+
+            const isEditingThis = editingMessageId === msg.id;
+
             return (
               <div
                 key={msg.id}
-                className={`flex items-end gap-2 ${isMe ? "flex-row-reverse" : ""}`}
+                className={`group flex items-end gap-2 ${
+                  isMe ? "flex-row-reverse" : ""
+                }`}
               >
                 {showAvatar ? (
                   <Avatar className="h-8 w-8 shrink-0">
@@ -240,18 +305,65 @@ export function ChatArea({
                   <div className="w-8 shrink-0" />
                 )}
                 <div
-                  className={`flex flex-col ${isMe ? "items-end" : "items-start"} max-w-[70%]`}
+                  className={`flex flex-col ${
+                    isMe ? "items-end" : "items-start"
+                  } max-w-[70%]`}
                 >
-                  <div
-                    className={`px-4 py-2 rounded-2xl ${
-                      isMe
-                        ? "bg-primary text-primary-foreground rounded-br-sm"
-                        : "bg-muted rounded-bl-sm"
-                    }`}
-                  >
-                    <p className="text-sm">{msg.content}</p>
-                  </div>
+                  {isEditingThis ? (
+                    <div className="flex items-center gap-2 bg-muted p-2 rounded-2xl border">
+                      <Input
+                        value={editingText}
+                        onChange={(e) => setEditingText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleSaveEdit(msg.id);
+                          if (e.key === "Escape") handleCancelEdit();
+                        }}
+                        className="h-8 text-sm bg-background"
+                        autoFocus
+                      />
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-green-600 hover:text-green-700"
+                        onClick={() => handleSaveEdit(msg.id)}
+                      >
+                        <Check className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-red-500 hover:text-red-600"
+                        onClick={handleCancelEdit}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div
+                      className={`relative group/msg px-4 py-2 rounded-2xl ${
+                        isMe
+                          ? "bg-primary text-primary-foreground rounded-br-sm"
+                          : "bg-muted rounded-bl-sm"
+                      }`}
+                    >
+                      <p className="text-sm">{msg.content}</p>
+                    </div>
+                  )}
                   <div className="flex items-center gap-1 mt-1 px-1">
+                    {isEditable && !isEditingThis && (
+                      <button
+                        onClick={() => handleStartEdit(msg)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-muted rounded text-muted-foreground"
+                        title="Edit message (< 5 mins)"
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                    )}
+                    {msg.isEdited && (
+                      <span className="text-[10px] text-muted-foreground italic">
+                        (edited)
+                      </span>
+                    )}
                     <span className="text-[10px] text-muted-foreground">
                       {msg.timestamp}
                     </span>
@@ -294,3 +406,4 @@ export function ChatArea({
     </div>
   );
 }
+

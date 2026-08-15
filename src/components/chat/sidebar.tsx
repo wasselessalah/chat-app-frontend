@@ -194,9 +194,41 @@ export function Sidebar() {
       }
     };
 
+    const handleMessageUpdated = (updatedMsg: any) => {
+      const otherUserId = updatedMsg.chatId
+        ? updatedMsg.chatId
+            .split("_vs_")
+            .find((id: string) => id !== currentUser.id)
+        : null;
+
+      if (otherUserId) {
+        setUsers((prevUsers) => {
+          const updated = prevUsers.map((user) => {
+            if (user.id === otherUserId) {
+              return {
+                ...user,
+                lastMessage: {
+                  content: updatedMsg.content,
+                  createdAt:
+                    updatedMsg.createdAt ||
+                    user.lastMessage?.createdAt ||
+                    new Date().toISOString(),
+                  senderId: updatedMsg.senderId,
+                },
+              };
+            }
+            return user;
+          });
+          return sortUsers(updated);
+        });
+      }
+    };
+
     socket.on("receive_message", handleReceiveMessage);
+    socket.on("message_updated", handleMessageUpdated);
     return () => {
       socket.off("receive_message", handleReceiveMessage);
+      socket.off("message_updated", handleMessageUpdated);
     };
   }, [selectedId, currentUser]);
 
