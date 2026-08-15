@@ -73,6 +73,8 @@ model Message {
   senderId   String
   senderName String
   chatId     String
+  isRead     Boolean  @default(false)
+  isDeleted  Boolean  @default(false)
   createdAt  DateTime @default(now())
   
   user       User     @relation(fields: [senderId], references: [id], onDelete: Cascade)

@@ -14,6 +14,8 @@ import {
   Check,
   CheckCheck,
   Pencil,
+  Trash2,
+  Ban,
   X,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
@@ -138,16 +140,34 @@ export function ChatArea({
       }
     };
 
+    const handleMessageDeleted = (deletedMsg: any) => {
+      if (deletedMsg.chatId === conversation.id) {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === deletedMsg.id
+              ? {
+                  ...msg,
+                  content: deletedMsg.content || "This message was deleted",
+                  isDeleted: true,
+                }
+              : msg
+          )
+        );
+      }
+    };
+
     socket.on("receive_message", handleReceiveMessage);
     socket.on("messages_read", handleMessagesRead);
     socket.on("message_updated", handleMessageUpdated);
+    socket.on("message_deleted", handleMessageDeleted);
 
     return () => {
       socket.off("receive_message", handleReceiveMessage);
       socket.off("messages_read", handleMessagesRead);
       socket.off("message_updated", handleMessageUpdated);
+      socket.off("message_deleted", handleMessageDeleted);
     };
-  }, [conversation.id, currentUser.id]);
+  }, [conversation.id, currentUser.id, BACKEND_URL]);
 
   const getDisplayName = (user: ChatUser) => user.name || "Unknown";
   const getAvatar = (user: ChatUser) => user.image || user.avatar || "";
@@ -194,6 +214,16 @@ export function ChatArea({
   const handleCancelEdit = () => {
     setEditingMessageId(null);
     setEditingText("");
+  };
+
+  const handleDeleteMessage = (messageId: string) => {
+    const socket = getSocket();
+    if (socket) {
+      socket.emit("delete_message", {
+        messageId,
+        senderId: currentUser.id,
+      });
+    }
   };
 
   return (
@@ -270,6 +300,8 @@ export function ChatArea({
           )}
           {messages.map((msg, idx) => {
             const isMe = msg.senderId === currentUser.id;
+            const isDeleted =
+              msg.isDeleted || msg.content === "This message was deleted";
             const senderAvatar = isMe
               ? getAvatar(currentUser)
               : getAvatar(otherUser);
@@ -279,9 +311,10 @@ export function ChatArea({
             const showAvatar =
               idx === 0 || messages[idx - 1].senderId !== msg.senderId;
 
-            // Check if message is editable (less than 5 minutes old)
+            // Check if message is editable/deletable (less than 5 minutes old and not deleted)
             const isEditable =
               isMe &&
+              !isDeleted &&
               msg.createdAt &&
               Date.now() - new Date(msg.createdAt).getTime() < 5 * 60 * 1000;
 
@@ -338,6 +371,19 @@ export function ChatArea({
                         <X className="w-4 h-4" />
                       </Button>
                     </div>
+                  ) : isDeleted ? (
+                    <div
+                      className={`relative group/msg px-4 py-2 rounded-2xl border ${
+                        isMe
+                          ? "bg-muted/40 text-muted-foreground rounded-br-sm border-dashed"
+                          : "bg-muted/40 text-muted-foreground rounded-bl-sm border-dashed"
+                      }`}
+                    >
+                      <p className="text-sm italic flex items-center gap-1.5 text-muted-foreground select-none">
+                        <Ban className="w-3.5 h-3.5 shrink-0 text-muted-foreground/70" />
+                        <span>This message was deleted</span>
+                      </p>
+                    </div>
                   ) : (
                     <div
                       className={`relative group/msg px-4 py-2 rounded-2xl ${
@@ -351,15 +397,24 @@ export function ChatArea({
                   )}
                   <div className="flex items-center gap-1 mt-1 px-1">
                     {isEditable && !isEditingThis && (
-                      <button
-                        onClick={() => handleStartEdit(msg)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-muted rounded text-muted-foreground"
-                        title="Edit message (< 5 mins)"
-                      >
-                        <Pencil className="w-3 h-3" />
-                      </button>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => handleStartEdit(msg)}
+                          className="p-0.5 hover:bg-muted rounded text-muted-foreground transition-colors"
+                          title="Edit message (< 5 mins)"
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteMessage(msg.id)}
+                          className="p-0.5 hover:bg-red-500/10 hover:text-red-500 rounded text-muted-foreground transition-colors"
+                          title="Delete message (< 5 mins)"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
                     )}
-                    {msg.isEdited && (
+                    {msg.isEdited && !isDeleted && (
                       <span className="text-[10px] text-muted-foreground italic">
                         (edited)
                       </span>

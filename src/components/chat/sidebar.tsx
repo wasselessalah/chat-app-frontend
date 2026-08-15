@@ -224,11 +224,43 @@ export function Sidebar() {
       }
     };
 
+    const handleMessageDeleted = (deletedMsg: any) => {
+      const otherUserId = deletedMsg.chatId
+        ? deletedMsg.chatId
+            .split("_vs_")
+            .find((id: string) => id !== currentUser.id)
+        : null;
+
+      if (otherUserId) {
+        setUsers((prevUsers) => {
+          const updated = prevUsers.map((user) => {
+            if (user.id === otherUserId) {
+              return {
+                ...user,
+                lastMessage: {
+                  content: deletedMsg.content || "This message was deleted",
+                  createdAt:
+                    deletedMsg.createdAt ||
+                    user.lastMessage?.createdAt ||
+                    new Date().toISOString(),
+                  senderId: deletedMsg.senderId,
+                },
+              };
+            }
+            return user;
+          });
+          return sortUsers(updated);
+        });
+      }
+    };
+
     socket.on("receive_message", handleReceiveMessage);
     socket.on("message_updated", handleMessageUpdated);
+    socket.on("message_deleted", handleMessageDeleted);
     return () => {
       socket.off("receive_message", handleReceiveMessage);
       socket.off("message_updated", handleMessageUpdated);
+      socket.off("message_deleted", handleMessageDeleted);
     };
   }, [selectedId, currentUser]);
 
