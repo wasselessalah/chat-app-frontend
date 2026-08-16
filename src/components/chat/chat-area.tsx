@@ -17,7 +17,9 @@ import {
   Trash2,
   Ban,
   Smile,
+  Loader2,
   X,
+  Users,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { getSocket } from "@/lib/socket";
@@ -26,7 +28,46 @@ import { useOnlineUsers } from "@/hooks/useOnlineUsers";
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
 
-const EMOJIS = ["👍", "❤️", "😂", "😮"];
+const EMOJIS = [
+  "👍", "❤️", "😂", "😮", "🔥", "🎉", "😢", "👏",
+  "🙏", "😍", "💯", "🚀", "🤣", "💩", "🥳", "✨"
+];
+
+const EMOJI_CATEGORIES = [
+  {
+    name: "Smiles & Expressions",
+    emojis: [
+      "😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "😊", "😇",
+      "🙂", "🙃", "😉", "😌", "😍", "🥰", "😘", "😗", "😙", "😚",
+      "😋", "😛", "😜", "🤪", "🤨", "🧐", "🤓", "😎", "🤩", "🥳",
+      "😏", "😒", "😞", "😔", "😟", "😕", "🙁", "☹️", "😣", "😖",
+      "😫", "😩", "🥺", "😢", "😭", "😤", "😠", "😡", "🤬", "🤯"
+    ],
+  },
+  {
+    name: "Hands & Gestures",
+    emojis: [
+      "👍", "👎", "👊", "✊", "🤛", "🤜", "🤞", "✌️", "🤟", "🤘",
+      "👌", "🤌", "🤏", "👈", "👉", "👆", "👇", "☝️", "✋", "🤚",
+      "🖐️", "🖖", "👋", "🤙", "💪", "✍️", "🙏", "🤝", "👏", "🙌"
+    ],
+  },
+  {
+    name: "Hearts & Symbols",
+    emojis: [
+      "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "🤎", "💔",
+      "❣️", "💕", "💞", "💓", "💗", "💖", "💘", "💝", "✨", "🌟",
+      "⭐", "💫", "🔥", "💥", "🎉", "🎊", "💯", "🚀"
+    ],
+  },
+  {
+    name: "Food & Activities",
+    emojis: [
+      "🍕", "🍔", "🍟", "🌭", "🍿", "☕", "🍺", "🍻", "🥂", "🍾",
+      "🎂", "🎈", "🎁", "⚽", "🏀", "🎮", "🎵", "🎧", "📷", "💡"
+    ],
+  },
+];
 
 const parseReactions = (raw: any): { emoji: string; userId: string }[] => {
   if (Array.isArray(raw)) return raw;
@@ -71,43 +112,97 @@ export function ChatArea({
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
   const [activePickerId, setActivePickerId] = useState<string | null>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+
+  const inputRef = useRef<HTMLInputElement>(null);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        emojiPickerRef.current &&
+        !emojiPickerRef.current.contains(event.target as Node)
+      ) {
+        setShowEmojiPicker(false);
+      }
+    };
+    if (showEmojiPicker) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showEmojiPicker]);
+
+  const handleSelectEmoji = (emoji: string) => {
+    setInputValue((prev) => prev + emoji);
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+  };
+
+  // Pagination states
+  const [hasMore, setHasMore] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const isInitialLoadRef = useRef(true);
+
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const otherUser = conversation.participants.find(
+  const isGroup = conversation.isGroup || conversation.participants.length > 2;
+  const otherUsers = conversation.participants.filter(
     (p) => p.id !== currentUser.id
   );
+  const otherUser = otherUsers[0];
 
   const onlineUserIds = useOnlineUsers();
   const isOnline = otherUser ? onlineUserIds.has(otherUser.id) : false;
 
-  // Auto-scroll when messages change
+  // Auto-scroll on initial load or new message
   useEffect(() => {
-    if (scrollRef.current) {
+    if (isInitialLoadRef.current && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      isInitialLoadRef.current = false;
     }
-  }, [messages, conversation.id]);
+  }, [messages]);
 
-  // Handle Socket.IO connections and historical messages
+  // Handle Socket.IO connections and initial historical messages (15 per page)
   useEffect(() => {
     const socket = getSocket();
     if (!socket) return;
 
-    // Fetch historical messages from the backend
+    isInitialLoadRef.current = true;
+
+    // Fetch initial 15 messages from the backend
     const fetchMessages = async () => {
       try {
         const res = await fetch(
-          `${BACKEND_URL}/api/messages?chatId=${conversation.id}`
+          `${BACKEND_URL}/api/messages?chatId=${conversation.id}&limit=15`
         );
         if (res.ok) {
           const data = await res.json();
-          const formattedData = data.map((msg: any) => ({
+          const rawMessages = Array.isArray(data) ? data : data.messages || [];
+          const hasMoreMessages = Array.isArray(data) ? false : !!data.hasMore;
+          const cursor = Array.isArray(data) ? null : data.nextCursor;
+
+          const formattedData = rawMessages.map((msg: any) => ({
             ...msg,
             timestamp: new Date(msg.createdAt).toLocaleTimeString([], {
               hour: "2-digit",
               minute: "2-digit",
             }),
           }));
+
           setMessages(formattedData);
+          setHasMore(hasMoreMessages);
+          setNextCursor(cursor);
+
+          // Scroll to bottom on initial load
+          setTimeout(() => {
+            if (scrollRef.current) {
+              scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+            }
+          }, 50);
 
           // Once loaded, mark them as read
           socket.emit("mark_messages_read", {
@@ -134,6 +229,13 @@ export function ChatArea({
             ).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
           },
         ]);
+
+        // Auto-scroll to bottom on new incoming message
+        setTimeout(() => {
+          if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+          }
+        }, 50);
 
         // If someone else sent it and we just received it, mark it as read immediately
         if (newMessage.senderId !== currentUser.id) {
@@ -221,6 +323,52 @@ export function ChatArea({
     };
   }, [conversation.id, currentUser.id, BACKEND_URL]);
 
+  const loadOlderMessages = async () => {
+    if (!hasMore || isLoadingMore || !nextCursor) return;
+    setIsLoadingMore(true);
+
+    const scrollContainer = scrollRef.current;
+    const previousScrollHeight = scrollContainer ? scrollContainer.scrollHeight : 0;
+
+    try {
+      const res = await fetch(
+        `${BACKEND_URL}/api/messages?chatId=${
+          conversation.id
+        }&limit=15&before=${encodeURIComponent(nextCursor)}`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        const rawMessages = Array.isArray(data) ? data : data.messages || [];
+        const hasMoreMessages = Array.isArray(data) ? false : !!data.hasMore;
+        const cursor = Array.isArray(data) ? null : data.nextCursor;
+
+        const formattedData = rawMessages.map((msg: any) => ({
+          ...msg,
+          timestamp: new Date(msg.createdAt).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        }));
+
+        setMessages((prev) => [...formattedData, ...prev]);
+        setHasMore(hasMoreMessages);
+        setNextCursor(cursor);
+
+        // Preserve scroll position when older messages load
+        requestAnimationFrame(() => {
+          if (scrollContainer) {
+            scrollContainer.scrollTop =
+              scrollContainer.scrollHeight - previousScrollHeight;
+          }
+        });
+      }
+    } catch (error) {
+      console.error("Error loading older messages:", error);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
+
   const getDisplayName = (user: ChatUser) => user.name || "Unknown";
   const getAvatar = (user: ChatUser) => user.image || user.avatar || "";
 
@@ -241,6 +389,7 @@ export function ChatArea({
     }
 
     setInputValue("");
+    setShowEmojiPicker(false);
   };
 
   const handleStartEdit = (msg: any) => {
@@ -291,33 +440,54 @@ export function ChatArea({
   };
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-background">
+    <div className="flex-1 min-h-0 min-w-0 flex flex-col bg-background h-full overflow-hidden">
       {/* Header */}
       <div className="h-16 border-b flex items-center justify-between px-6 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 shrink-0">
         <div className="flex items-center gap-4">
           <div className="relative">
-            <Avatar className="h-10 w-10">
-              <AvatarImage
-                src={getAvatar(otherUser)}
-                alt={getDisplayName(otherUser)}
-              />
-              <AvatarFallback>
-                {getDisplayName(otherUser).substring(0, 2).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-            {isOnline && (
-              <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-background rounded-full"></span>
+            {isGroup ? (
+              <Avatar className="h-10 w-10 bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold">
+                <Users className="h-5 w-5 text-primary" />
+              </Avatar>
+            ) : (
+              <>
+                <Avatar className="h-10 w-10">
+                  <AvatarImage
+                    src={getAvatar(otherUser)}
+                    alt={getDisplayName(otherUser || currentUser)}
+                  />
+                  <AvatarFallback>
+                    {getDisplayName(otherUser || currentUser)
+                      .substring(0, 2)
+                      .toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                {isOnline && (
+                  <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-background rounded-full"></span>
+                )}
+              </>
             )}
           </div>
           <div>
-            <h2 className="font-semibold">{getDisplayName(otherUser)}</h2>
+            <h2 className="font-semibold text-sm">
+              {isGroup
+                ? conversation.name ||
+                  otherUsers.map((u) => u.name).join(", ")
+                : getDisplayName(otherUser || currentUser)}
+            </h2>
             <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <span
-                className={`w-2 h-2 rounded-full ${
-                  isOnline ? "bg-green-500" : "bg-muted-foreground"
-                }`}
-              />
-              {isOnline ? "Online" : otherUser.email || "Offline"}
+              {isGroup ? (
+                <span>{conversation.participants.length} members</span>
+              ) : (
+                <>
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      isOnline ? "bg-green-500" : "bg-muted-foreground"
+                    }`}
+                  />
+                  {isOnline ? "Online" : otherUser?.email || "Offline"}
+                </>
+              )}
             </p>
           </div>
         </div>
@@ -355,8 +525,30 @@ export function ChatArea({
       </div>
 
       {/* Messages */}
-      <ScrollArea className="flex-1 p-6" ref={scrollRef}>
+      <ScrollArea className="flex-1 min-h-0 p-6" ref={scrollRef}>
         <div className="flex flex-col gap-4">
+          {/* Pagination Load Older Messages Button */}
+          {hasMore && (
+            <div className="flex justify-center py-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadOlderMessages}
+                disabled={isLoadingMore}
+                className="text-xs text-muted-foreground gap-1.5 rounded-full hover:bg-muted"
+              >
+                {isLoadingMore ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Loading older messages...</span>
+                  </>
+                ) : (
+                  <span>Load older messages</span>
+                )}
+              </Button>
+            </div>
+          )}
+
           {messages.length === 0 && (
             <div className="text-center text-muted-foreground text-sm py-8">
               No messages yet. Say hello! 👋
@@ -410,13 +602,13 @@ export function ChatArea({
                   {/* Quick Floating Emoji Reaction Bar */}
                   {!isDeleted && !isEditingThis && (
                     <div
-                      className={`absolute -top-4 ${
+                      className={`absolute -top-5 ${
                         isMe ? "right-0" : "left-0"
                       } ${
                         isPickerOpen
                           ? "flex"
                           : "hidden group-hover:flex"
-                      } items-center gap-1 bg-background/95 backdrop-blur border shadow-md rounded-full px-2 py-0.5 z-20 animate-in fade-in zoom-in duration-150`}
+                      } items-center gap-1 bg-background/95 backdrop-blur border shadow-md rounded-full px-2.5 py-1 z-20 max-w-[240px] overflow-x-auto overflow-y-hidden scrollbar-none whitespace-nowrap animate-in fade-in zoom-in duration-150`}
                     >
                       {EMOJIS.map((emoji) => {
                         const reactionsList = parseReactions(msg.reactions);
@@ -427,7 +619,7 @@ export function ChatArea({
                           <button
                             key={emoji}
                             onClick={() => handleToggleReaction(msg.id, emoji)}
-                            className={`hover:scale-125 transition-transform p-1 text-sm rounded-full ${
+                            className={`hover:scale-125 transition-transform p-1 text-sm rounded-full shrink-0 ${
                               isMyReaction ? "bg-primary/20 scale-110" : ""
                             }`}
                             title={`React with ${emoji}`}
@@ -437,6 +629,13 @@ export function ChatArea({
                         );
                       })}
                     </div>
+                  )}
+
+                  {/* Sender Name in Group Chat */}
+                  {!isMe && isGroup && (
+                    <span className="text-[11px] font-semibold text-primary mb-0.5 px-1">
+                      {msg.senderName || senderName}
+                    </span>
                   )}
 
                   {isEditingThis ? (
@@ -596,14 +795,67 @@ export function ChatArea({
       </ScrollArea>
 
       {/* Input */}
-      <div className="p-4 bg-background border-t shrink-0">
+      <div className="p-4 bg-background border-t shrink-0 relative" ref={emojiPickerRef}>
+        {showEmojiPicker && (
+          <div className="absolute bottom-18 left-4 z-30 w-80 bg-background/95 backdrop-blur border rounded-2xl shadow-xl p-3 flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-2 duration-150">
+            <div className="flex items-center justify-between border-b pb-2 px-1 shrink-0">
+              <span className="text-xs font-semibold text-muted-foreground">Emojis</span>
+              <button
+                type="button"
+                onClick={() => setShowEmojiPicker(false)}
+                className="text-muted-foreground hover:text-foreground p-1 rounded-full hover:bg-muted transition-colors cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <div className="max-h-60 overflow-y-auto pr-1 flex flex-col gap-3">
+              {EMOJI_CATEGORIES.map((cat) => (
+                <div key={cat.name}>
+                  <p className="text-[10px] font-semibold text-muted-foreground mb-1 px-1 sticky top-0 bg-background/95 py-1 z-10 backdrop-blur">
+                    {cat.name}
+                  </p>
+                  <div className="grid grid-cols-7 gap-1">
+                    {cat.emojis.map((emoji) => (
+                      <button
+                        key={emoji}
+                        type="button"
+                        onClick={() => handleSelectEmoji(emoji)}
+                        className="h-8 w-8 flex items-center justify-center text-lg rounded-md hover:bg-muted hover:scale-125 transition-all cursor-pointer"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <form className="flex items-center gap-2" onSubmit={handleSend}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowEmojiPicker((prev) => !prev)}
+            className={`rounded-full shrink-0 ${
+              showEmojiPicker
+                ? "text-primary bg-primary/10"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+            title="Add emoji"
+          >
+            <Smile className="h-5 w-5" />
+          </Button>
+
           <Input
+            ref={inputRef}
             placeholder="Type a message..."
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             className="flex-1 rounded-full bg-muted/50 border-transparent focus-visible:ring-primary"
           />
+
           <Button
             type="submit"
             size="icon"

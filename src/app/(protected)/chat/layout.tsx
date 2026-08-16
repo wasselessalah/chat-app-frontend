@@ -14,11 +14,13 @@ export default async function ChatLayout({ children }: { children: React.ReactNo
   }
 
   return (
-    <div className="flex flex-col min-h-screen ">
+    <div className="flex flex-col h-screen h-[100dvh] w-full overflow-hidden bg-background">
       <Navbar />
-      <div className="flex-1 flex overflow-hidden ">
+      <div className="flex-1 flex min-h-0 w-full overflow-hidden">
         <Sidebar />
-        {children}
+        <main className="flex-1 flex min-h-0 min-w-0 overflow-hidden">
+          {children}
+        </main>
       </div>
     </div>
   );

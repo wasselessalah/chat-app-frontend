@@ -21,8 +21,8 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={cn("font-sans", geist.variable)}>
-      <body className={`${jetbrainsMono.variable} antialiased`}>
+    <html lang="en" className={cn("font-sans h-full overflow-hidden", geist.variable)}>
+      <body className={`${jetbrainsMono.variable} antialiased h-full overflow-hidden`}>
         {children}
       </body>
     </html>

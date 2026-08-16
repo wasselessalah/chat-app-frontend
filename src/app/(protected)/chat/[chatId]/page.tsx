@@ -14,35 +14,69 @@ export default function ChatDetailPage() {
   const { data: session } = authClient.useSession();
   const currentUser = session?.user;
 
-  const [otherUser, setOtherUser] = useState<ChatUser | null>(null);
+  const [participants, setParticipants] = useState<ChatUser[]>([]);
+  const [groupName, setGroupName] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
+
+  const isGroup = chatId?.startsWith("group_");
 
   useEffect(() => {
     if (!currentUser || !chatId) return;
 
-    // ChatId format: "userId1_vs_userId2" (sorted).
-    // We need to find the ID that isn't the current user's.
-    const parts = chatId.split("_vs_");
-    const otherUserId = parts.find((id) => id !== currentUser.id);
+    if (isGroup) {
+      // Group Chat ID format: group_id1_vs_id2_vs_id3?name=CustomName
+      const [idPart, queryPart] = chatId.split("?");
+      const urlParams = new URLSearchParams(queryPart || "");
+      const explicitName = urlParams.get("name");
 
-    if (otherUserId) {
-      fetch(`/api/users/${otherUserId}`)
-        .then((res) => {
-          if (!res.ok) throw new Error("User not found");
-          return res.json();
-        })
-        .then((data) => {
-          setOtherUser(data as ChatUser);
+      const rawIds = idPart.replace("group_", "").split("_vs_");
+      const otherUserIds = rawIds.filter((id) => id !== currentUser.id);
+
+      Promise.all(
+        otherUserIds.map((id) =>
+          fetch(`/api/users/${id}`)
+            .then((res) => (res.ok ? res.json() : null))
+            .catch(() => null)
+        )
+      )
+        .then((fetchedUsers) => {
+          const validUsers = fetchedUsers.filter(Boolean) as ChatUser[];
+          setParticipants(validUsers);
+          if (explicitName) {
+            setGroupName(decodeURIComponent(explicitName));
+          } else {
+            setGroupName(`Group (${validUsers.map((u) => u.name).join(", ")})`);
+          }
           setLoading(false);
         })
         .catch((err) => {
-          console.error("Failed to load other user", err);
+          console.error("Failed to load group users", err);
           setLoading(false);
         });
     } else {
-      setLoading(false);
+      // 1-on-1 Chat ID format: id1_vs_id2
+      const parts = chatId.split("_vs_");
+      const otherUserId = parts.find((id) => id !== currentUser.id);
+
+      if (otherUserId) {
+        fetch(`/api/users/${otherUserId}`)
+          .then((res) => {
+            if (!res.ok) throw new Error("User not found");
+            return res.json();
+          })
+          .then((data) => {
+            setParticipants([data as ChatUser]);
+            setLoading(false);
+          })
+          .catch((err) => {
+            console.error("Failed to load other user", err);
+            setLoading(false);
+          });
+      } else {
+        setLoading(false);
+      }
     }
-  }, [chatId, currentUser]);
+  }, [chatId, currentUser, isGroup]);
 
   if (loading || !currentUser) {
     return (
@@ -55,13 +89,13 @@ export default function ChatDetailPage() {
     );
   }
 
-  if (!otherUser) {
+  if (participants.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center bg-muted/20">
         <div className="text-center">
           <h2 className="text-xl font-semibold mb-2">Chat Not Found</h2>
           <p className="text-muted-foreground">
-            This user does not exist or the chat ID is invalid.
+            This user or group chat does not exist.
           </p>
         </div>
       </div>
@@ -77,11 +111,13 @@ export default function ChatDetailPage() {
 
   const conversation = {
     id: chatId,
-    participants: [mappedCurrentUser, otherUser],
+    isGroup,
+    name: isGroup ? groupName || "Group Chat" : undefined,
+    participants: [mappedCurrentUser, ...participants],
   };
 
   return (
-    <>
+    <div className="flex-1 flex min-h-0 min-w-0 h-full overflow-hidden">
       <ChatArea
         conversation={conversation}
         currentUser={mappedCurrentUser}
@@ -94,6 +130,6 @@ export default function ChatDetailPage() {
           onClose={() => setShowDetails(false)}
         />
       )}
-    </>
+    </div>
   );
 }
