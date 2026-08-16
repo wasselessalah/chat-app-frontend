@@ -17,6 +17,7 @@ import {
   Trash2,
   Ban,
   Smile,
+  Loader2,
   X,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
@@ -71,6 +72,13 @@ export function ChatArea({
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
   const [activePickerId, setActivePickerId] = useState<string | null>(null);
+
+  // Pagination states
+  const [hasMore, setHasMore] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const isInitialLoadRef = useRef(true);
+
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const otherUser = conversation.participants.find(
@@ -80,34 +88,51 @@ export function ChatArea({
   const onlineUserIds = useOnlineUsers();
   const isOnline = otherUser ? onlineUserIds.has(otherUser.id) : false;
 
-  // Auto-scroll when messages change
+  // Auto-scroll on initial load or new message
   useEffect(() => {
-    if (scrollRef.current) {
+    if (isInitialLoadRef.current && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      isInitialLoadRef.current = false;
     }
-  }, [messages, conversation.id]);
+  }, [messages]);
 
-  // Handle Socket.IO connections and historical messages
+  // Handle Socket.IO connections and initial historical messages (15 per page)
   useEffect(() => {
     const socket = getSocket();
     if (!socket) return;
 
-    // Fetch historical messages from the backend
+    isInitialLoadRef.current = true;
+
+    // Fetch initial 15 messages from the backend
     const fetchMessages = async () => {
       try {
         const res = await fetch(
-          `${BACKEND_URL}/api/messages?chatId=${conversation.id}`
+          `${BACKEND_URL}/api/messages?chatId=${conversation.id}&limit=15`
         );
         if (res.ok) {
           const data = await res.json();
-          const formattedData = data.map((msg: any) => ({
+          const rawMessages = Array.isArray(data) ? data : data.messages || [];
+          const hasMoreMessages = Array.isArray(data) ? false : !!data.hasMore;
+          const cursor = Array.isArray(data) ? null : data.nextCursor;
+
+          const formattedData = rawMessages.map((msg: any) => ({
             ...msg,
             timestamp: new Date(msg.createdAt).toLocaleTimeString([], {
               hour: "2-digit",
               minute: "2-digit",
             }),
           }));
+
           setMessages(formattedData);
+          setHasMore(hasMoreMessages);
+          setNextCursor(cursor);
+
+          // Scroll to bottom on initial load
+          setTimeout(() => {
+            if (scrollRef.current) {
+              scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+            }
+          }, 50);
 
           // Once loaded, mark them as read
           socket.emit("mark_messages_read", {
@@ -134,6 +159,13 @@ export function ChatArea({
             ).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
           },
         ]);
+
+        // Auto-scroll to bottom on new incoming message
+        setTimeout(() => {
+          if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+          }
+        }, 50);
 
         // If someone else sent it and we just received it, mark it as read immediately
         if (newMessage.senderId !== currentUser.id) {
@@ -220,6 +252,52 @@ export function ChatArea({
       socket.off("message_reacted", handleMessageReacted);
     };
   }, [conversation.id, currentUser.id, BACKEND_URL]);
+
+  const loadOlderMessages = async () => {
+    if (!hasMore || isLoadingMore || !nextCursor) return;
+    setIsLoadingMore(true);
+
+    const scrollContainer = scrollRef.current;
+    const previousScrollHeight = scrollContainer ? scrollContainer.scrollHeight : 0;
+
+    try {
+      const res = await fetch(
+        `${BACKEND_URL}/api/messages?chatId=${
+          conversation.id
+        }&limit=15&before=${encodeURIComponent(nextCursor)}`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        const rawMessages = Array.isArray(data) ? data : data.messages || [];
+        const hasMoreMessages = Array.isArray(data) ? false : !!data.hasMore;
+        const cursor = Array.isArray(data) ? null : data.nextCursor;
+
+        const formattedData = rawMessages.map((msg: any) => ({
+          ...msg,
+          timestamp: new Date(msg.createdAt).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        }));
+
+        setMessages((prev) => [...formattedData, ...prev]);
+        setHasMore(hasMoreMessages);
+        setNextCursor(cursor);
+
+        // Preserve scroll position when older messages load
+        requestAnimationFrame(() => {
+          if (scrollContainer) {
+            scrollContainer.scrollTop =
+              scrollContainer.scrollHeight - previousScrollHeight;
+          }
+        });
+      }
+    } catch (error) {
+      console.error("Error loading older messages:", error);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
 
   const getDisplayName = (user: ChatUser) => user.name || "Unknown";
   const getAvatar = (user: ChatUser) => user.image || user.avatar || "";
@@ -357,6 +435,28 @@ export function ChatArea({
       {/* Messages */}
       <ScrollArea className="flex-1 p-6" ref={scrollRef}>
         <div className="flex flex-col gap-4">
+          {/* Pagination Load Older Messages Button */}
+          {hasMore && (
+            <div className="flex justify-center py-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadOlderMessages}
+                disabled={isLoadingMore}
+                className="text-xs text-muted-foreground gap-1.5 rounded-full hover:bg-muted"
+              >
+                {isLoadingMore ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Loading older messages...</span>
+                  </>
+                ) : (
+                  <span>Load older messages</span>
+                )}
+              </Button>
+            </div>
+          )}
+
           {messages.length === 0 && (
             <div className="text-center text-muted-foreground text-sm py-8">
               No messages yet. Say hello! 👋
