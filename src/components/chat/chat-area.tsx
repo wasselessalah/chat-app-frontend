@@ -19,6 +19,7 @@ import {
   Smile,
   Loader2,
   X,
+  Users,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { getSocket } from "@/lib/socket";
@@ -148,9 +149,11 @@ export function ChatArea({
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const otherUser = conversation.participants.find(
+  const isGroup = conversation.isGroup || conversation.participants.length > 2;
+  const otherUsers = conversation.participants.filter(
     (p) => p.id !== currentUser.id
   );
+  const otherUser = otherUsers[0];
 
   const onlineUserIds = useOnlineUsers();
   const isOnline = otherUser ? onlineUserIds.has(otherUser.id) : false;
@@ -442,28 +445,49 @@ export function ChatArea({
       <div className="h-16 border-b flex items-center justify-between px-6 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 shrink-0">
         <div className="flex items-center gap-4">
           <div className="relative">
-            <Avatar className="h-10 w-10">
-              <AvatarImage
-                src={getAvatar(otherUser)}
-                alt={getDisplayName(otherUser)}
-              />
-              <AvatarFallback>
-                {getDisplayName(otherUser).substring(0, 2).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-            {isOnline && (
-              <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-background rounded-full"></span>
+            {isGroup ? (
+              <Avatar className="h-10 w-10 bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold">
+                <Users className="h-5 w-5 text-primary" />
+              </Avatar>
+            ) : (
+              <>
+                <Avatar className="h-10 w-10">
+                  <AvatarImage
+                    src={getAvatar(otherUser)}
+                    alt={getDisplayName(otherUser || currentUser)}
+                  />
+                  <AvatarFallback>
+                    {getDisplayName(otherUser || currentUser)
+                      .substring(0, 2)
+                      .toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                {isOnline && (
+                  <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-background rounded-full"></span>
+                )}
+              </>
             )}
           </div>
           <div>
-            <h2 className="font-semibold">{getDisplayName(otherUser)}</h2>
+            <h2 className="font-semibold text-sm">
+              {isGroup
+                ? conversation.name ||
+                  otherUsers.map((u) => u.name).join(", ")
+                : getDisplayName(otherUser || currentUser)}
+            </h2>
             <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <span
-                className={`w-2 h-2 rounded-full ${
-                  isOnline ? "bg-green-500" : "bg-muted-foreground"
-                }`}
-              />
-              {isOnline ? "Online" : otherUser.email || "Offline"}
+              {isGroup ? (
+                <span>{conversation.participants.length} members</span>
+              ) : (
+                <>
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      isOnline ? "bg-green-500" : "bg-muted-foreground"
+                    }`}
+                  />
+                  {isOnline ? "Online" : otherUser?.email || "Offline"}
+                </>
+              )}
             </p>
           </div>
         </div>
@@ -605,6 +629,13 @@ export function ChatArea({
                         );
                       })}
                     </div>
+                  )}
+
+                  {/* Sender Name in Group Chat */}
+                  {!isMe && isGroup && (
+                    <span className="text-[11px] font-semibold text-primary mb-0.5 px-1">
+                      {msg.senderName || senderName}
+                    </span>
                   )}
 
                   {isEditingThis ? (

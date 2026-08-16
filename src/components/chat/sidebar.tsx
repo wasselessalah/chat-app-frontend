@@ -16,6 +16,7 @@ interface LastMessage {
   content: string;
   createdAt: string;
   senderId: string;
+  senderName?: string;
 }
 
 interface AppUser {
@@ -23,6 +24,14 @@ interface AppUser {
   name: string;
   email: string;
   image: string | null;
+  lastMessage?: LastMessage | null;
+}
+
+interface GroupConversation {
+  chatId: string;
+  name: string | null;
+  memberIds: string[];
+  members: AppUser[];
   lastMessage?: LastMessage | null;
 }
 
@@ -62,6 +71,8 @@ function formatMessageTime(dateString?: string | Date) {
   });
 }
 
+const formatTimestamp = formatMessageTime;
+
 function sortUsers(userList: AppUser[]): AppUser[] {
   return [...userList].sort((a, b) => {
     const timeA = a.lastMessage
@@ -86,6 +97,8 @@ export function Sidebar() {
   const currentUser = session?.user;
 
   const [users, setUsers] = useState<AppUser[]>([]);
+  const [groups, setGroups] = useState<GroupConversation[]>([]);
+  const [activeTab, setActiveTab] = useState<"all" | "direct" | "groups">("all");
   const [search, setSearch] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
@@ -173,11 +186,30 @@ export function Sidebar() {
     }
   }, [currentUser?.id, BACKEND_URL]);
 
+  // Fetch user group conversations
+  const fetchGroups = useCallback(async () => {
+    if (!currentUser?.id) return;
+    try {
+      const res = await fetch(
+        `${BACKEND_URL}/api/messages/groups?userId=${currentUser.id}`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setGroups(data);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching user groups:", err);
+    }
+  }, [currentUser?.id, BACKEND_URL]);
+
   // Initial load
   useEffect(() => {
     fetchUsers("");
     fetchUnreadCounts();
-  }, [fetchUsers, fetchUnreadCounts]);
+    fetchGroups();
+  }, [fetchUsers, fetchUnreadCounts, fetchGroups]);
 
   // Debounced search
   useEffect(() => {
@@ -193,9 +225,7 @@ export function Sidebar() {
     if (!socket || !currentUser) return;
 
     const handleReceiveMessage = (newMessage: any) => {
-      // If we received a message from someone else
       if (newMessage.senderId !== currentUser.id) {
-        // Only increment if we are NOT currently in that chat room
         if (selectedId !== newMessage.chatId) {
           setUnreadCounts((prev) => ({
             ...prev,
@@ -204,7 +234,6 @@ export function Sidebar() {
         }
       }
 
-      // Update user lastMessage and re-sort sidebar
       const otherUserId = newMessage.chatId
         ? newMessage.chatId
             .split("_vs_")
@@ -231,80 +260,15 @@ export function Sidebar() {
       }
     };
 
-    const handleMessageUpdated = (updatedMsg: any) => {
-      const otherUserId = updatedMsg.chatId
-        ? updatedMsg.chatId
-            .split("_vs_")
-            .find((id: string) => id !== currentUser.id)
-        : null;
-
-      if (otherUserId) {
-        setUsers((prevUsers) => {
-          const updated = prevUsers.map((user) => {
-            if (user.id === otherUserId) {
-              return {
-                ...user,
-                lastMessage: {
-                  content: updatedMsg.content,
-                  createdAt:
-                    updatedMsg.createdAt ||
-                    user.lastMessage?.createdAt ||
-                    new Date().toISOString(),
-                  senderId: updatedMsg.senderId,
-                },
-              };
-            }
-            return user;
-          });
-          return sortUsers(updated);
-        });
-      }
-    };
-
-    const handleMessageDeleted = (deletedMsg: any) => {
-      const otherUserId = deletedMsg.chatId
-        ? deletedMsg.chatId
-            .split("_vs_")
-            .find((id: string) => id !== currentUser.id)
-        : null;
-
-      if (otherUserId) {
-        setUsers((prevUsers) => {
-          const updated = prevUsers.map((user) => {
-            if (user.id === otherUserId) {
-              return {
-                ...user,
-                lastMessage: {
-                  content: deletedMsg.content || "This message was deleted",
-                  createdAt:
-                    deletedMsg.createdAt ||
-                    user.lastMessage?.createdAt ||
-                    new Date().toISOString(),
-                  senderId: deletedMsg.senderId,
-                },
-              };
-            }
-            return user;
-          });
-          return sortUsers(updated);
-        });
-      }
-    };
-
     socket.on("receive_message", handleReceiveMessage);
-    socket.on("message_updated", handleMessageUpdated);
-    socket.on("message_deleted", handleMessageDeleted);
     return () => {
       socket.off("receive_message", handleReceiveMessage);
-      socket.off("message_updated", handleMessageUpdated);
-      socket.off("message_deleted", handleMessageDeleted);
     };
   }, [selectedId, currentUser]);
 
   // Clear unread count when opening a chat
   useEffect(() => {
     if (selectedId && currentUser) {
-      // Find the other user ID from the selected chatId
       const otherUserId = selectedId
         .split("_vs_")
         .find((id) => id !== currentUser.id);
@@ -328,7 +292,6 @@ export function Sidebar() {
 
   return (
     <div className="w-80 border-r bg-muted/30 flex flex-col shrink-0 min-h-0 h-full overflow-hidden">
-      {/* Header */}
       <div className="p-4 flex items-center justify-between border-b shrink-0">
         <div className="flex items-center gap-3">
           <Avatar>
@@ -355,17 +318,9 @@ export function Sidebar() {
           >
             <UserPlus className="w-4 h-4" />
           </button>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="p-2 hover:bg-muted rounded-full transition-colors cursor-pointer text-muted-foreground hover:text-foreground"
-            title="Create Group"
-          >
-            <Users className="w-4 h-4" />
-          </button>
         </div>
       </div>
 
-      {/* Search */}
       <div className="p-3 shrink-0">
         <div className="relative">
           {isSearching ? (
@@ -375,79 +330,185 @@ export function Sidebar() {
           )}
           <Input
             type="search"
-            placeholder="Search users..."
+            placeholder="Search users or groups..."
             className="pl-8 bg-background"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
+
+        <div className="flex items-center gap-1 mt-3 bg-muted/60 p-1 rounded-xl">
+          <button
+            onClick={() => setActiveTab("all")}
+            className={`flex-1 py-1 text-xs font-medium rounded-lg transition-all ${
+              activeTab === "all"
+                ? "bg-background text-foreground shadow-xs"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            All
+          </button>
+          <button
+            onClick={() => setActiveTab("direct")}
+            className={`flex-1 py-1 text-xs font-medium rounded-lg transition-all ${
+              activeTab === "direct"
+                ? "bg-background text-foreground shadow-xs"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Direct
+          </button>
+          <button
+            onClick={() => setActiveTab("groups")}
+            className={`flex-1 py-1 text-xs font-medium rounded-lg transition-all ${
+              activeTab === "groups"
+                ? "bg-background text-foreground shadow-xs"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Groups {groups.length > 0 && `(${groups.length})`}
+          </button>
+        </div>
       </div>
 
-      {/* User list */}
       <ScrollArea className="flex-1 min-h-0">
         <div className="flex flex-col gap-1 p-2">
-          {users.length === 0 && !isSearching && (
-            <div className="text-center text-muted-foreground text-sm py-8">
-              {search ? `No users found for "${search}"` : "No other users yet"}
+          {/* Groups Section */}
+          {(activeTab === "all" || activeTab === "groups") && groups.length > 0 && (
+            <div className="flex flex-col gap-1 mb-2">
+              {activeTab === "all" && (
+                <div className="px-3 py-1.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  Groups
+                </div>
+              )}
+              {groups
+                .filter((g) => {
+                  const gName =
+                    g.name || g.members.map((m) => m.name).join(", ");
+                  return gName.toLowerCase().includes(search.toLowerCase());
+                })
+                .map((group) => {
+                  const isSelected = selectedId === group.chatId;
+                  const groupName =
+                    group.name ||
+                    group.members.map((m) => m.name).join(", ") ||
+                    "Group Chat";
+
+                  return (
+                    <Link
+                      href={`/chat/${group.chatId}`}
+                      key={group.chatId}
+                      className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
+                        isSelected
+                          ? "bg-primary/10 text-primary font-medium"
+                          : "hover:bg-muted text-foreground"
+                      }`}
+                    >
+                      <div className="relative shrink-0">
+                        <Avatar className="h-10 w-10 bg-primary/10 border border-primary/20 flex items-center justify-center">
+                          <Users className="h-5 w-5 text-primary" />
+                        </Avatar>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-sm truncate">
+                            {groupName}
+                          </span>
+                          {group.lastMessage?.createdAt && (
+                            <span className="text-[10px] text-muted-foreground shrink-0">
+                              {formatTimestamp(group.lastMessage.createdAt)}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground truncate mt-0.5">
+                          {group.lastMessage?.content
+                            ? `${
+                                group.lastMessage.senderName
+                                  ? group.lastMessage.senderName + ": "
+                                  : ""
+                              }${group.lastMessage.content}`
+                            : `${group.memberIds.length} members`}
+                        </p>
+                      </div>
+                    </Link>
+                  );
+                })}
             </div>
           )}
-          {users.map((otherUser) => {
-            // UUID-safe chat ID: sort both IDs and join with "_vs_"
-            const chatId = [currentUser.id, otherUser.id]
-              .sort()
-              .join("_vs_");
-            const isSelected = selectedId === chatId;
-            const isOnline = onlineUserIds.has(otherUser.id);
-            const unreadCount = unreadCounts[otherUser.id] || 0;
-            const lastMsg = otherUser.lastMessage;
 
-            return (
-              <Link
-                href={`/chat/${chatId}`}
-                key={otherUser.id}
-                className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
-                  isSelected
-                    ? "bg-primary/10 text-primary"
-                    : "hover:bg-muted text-foreground"
-                }`}
-              >
-                <div className="relative shrink-0">
-                  <Avatar>
-                    <AvatarImage
-                      src={otherUser.image ?? ""}
-                      alt={otherUser.name}
-                    />
-                    <AvatarFallback>
-                      {otherUser.name.substring(0, 2).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  {isOnline && (
-                    <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-background rounded-full"></span>
-                  )}
+          {/* Direct Messages Section */}
+          {(activeTab === "all" || activeTab === "direct") && (
+            <div className="flex flex-col gap-1">
+              {activeTab === "all" && groups.length > 0 && (
+                <div className="px-3 py-1.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  Direct Messages
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-1">
-                    <p className="font-medium text-sm truncate">{otherUser.name}</p>
-                    {lastMsg && (
-                      <span className="text-[11px] text-muted-foreground shrink-0">
-                        {formatMessageTime(lastMsg.createdAt)}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground truncate mt-0.5">
-                    {lastMsg
-                      ? `${lastMsg.senderId === currentUser.id ? "You: " : ""}${lastMsg.content}`
-                      : "No messages yet"}
-                  </p>
+              )}
+              {users.length === 0 && !isSearching && (
+                <div className="text-center text-muted-foreground text-sm py-8">
+                  {search ? `No users found for "${search}"` : "No other users yet"}
                 </div>
-                {unreadCount > 0 && (
-                  <div className="flex items-center justify-center min-w-5 h-5 px-1.5 text-[10px] font-bold text-primary-foreground bg-primary rounded-full shrink-0">
-                    {unreadCount}
-                  </div>
-                )}
-              </Link>
-            );
-          })}
+              )}
+              {users.map((otherUser) => {
+                const chatId = [currentUser.id, otherUser.id]
+                  .sort()
+                  .join("_vs_");
+                const isSelected = selectedId === chatId;
+                const isOnline = onlineUserIds.has(otherUser.id);
+                const unreadCount = unreadCounts[otherUser.id] || 0;
+                const lastMsg = otherUser.lastMessage;
+
+                return (
+                  <Link
+                    href={`/chat/${chatId}`}
+                    key={otherUser.id}
+                    className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
+                      isSelected
+                        ? "bg-primary/10 text-primary font-medium"
+                        : "hover:bg-muted text-foreground"
+                    }`}
+                  >
+                    <div className="relative shrink-0">
+                      <Avatar>
+                        <AvatarImage
+                          src={otherUser.image ?? ""}
+                          alt={otherUser.name}
+                        />
+                        <AvatarFallback>
+                          {otherUser.name.substring(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      {isOnline && (
+                        <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-background rounded-full"></span>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-sm truncate">
+                          {otherUser.name}
+                        </span>
+                        {lastMsg?.createdAt && (
+                          <span className="text-[10px] text-muted-foreground shrink-0">
+                            {formatTimestamp(lastMsg.createdAt)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between mt-0.5">
+                        <p className="text-xs text-muted-foreground truncate max-w-[140px]">
+                          {lastMsg ? lastMsg.content : otherUser.email}
+                        </p>
+                        {unreadCount > 0 && (
+                          <span className="bg-primary text-primary-foreground text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0">
+                            {unreadCount}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
         </div>
       </ScrollArea>
 
