@@ -26,7 +26,7 @@ export function DetailsPanel({
   const getAvatar = (user: ChatUser) => user.image || user.avatar || "";
 
   return (
-    <div className="w-80 border-l bg-background flex flex-col h-full shrink-0">
+    <div className="w-80 border-l bg-background flex flex-col h-full shrink-0 min-h-0 overflow-hidden">
       <div className="h-16 flex items-center justify-between px-4 border-b shrink-0">
         <h3 className="font-semibold">Contact Info</h3>
         <Button
@@ -39,7 +39,7 @@ export function DetailsPanel({
         </Button>
       </div>
 
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 min-h-0">
         <div className="flex flex-col items-center p-6 border-b">
           <Avatar className="h-24 w-24 mb-4">
             <AvatarImage

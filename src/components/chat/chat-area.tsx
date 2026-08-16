@@ -369,7 +369,7 @@ export function ChatArea({
   };
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-background">
+    <div className="flex-1 min-h-0 min-w-0 flex flex-col bg-background h-full overflow-hidden">
       {/* Header */}
       <div className="h-16 border-b flex items-center justify-between px-6 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 shrink-0">
         <div className="flex items-center gap-4">
@@ -433,7 +433,7 @@ export function ChatArea({
       </div>
 
       {/* Messages */}
-      <ScrollArea className="flex-1 p-6" ref={scrollRef}>
+      <ScrollArea className="flex-1 min-h-0 p-6" ref={scrollRef}>
         <div className="flex flex-col gap-4">
           {/* Pagination Load Older Messages Button */}
           {hasMore && (

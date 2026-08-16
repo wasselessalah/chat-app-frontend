@@ -290,7 +290,7 @@ export function Sidebar() {
   }
 
   return (
-    <div className="w-80 border-r bg-muted/30 flex flex-col shrink-0 min-h-0">
+    <div className="w-80 border-r bg-muted/30 flex flex-col shrink-0 min-h-0 h-full overflow-hidden">
       {/* Header */}
       <div className="p-4 flex items-center justify-between border-b shrink-0">
         <div className="flex items-center gap-3">
@@ -334,7 +334,7 @@ export function Sidebar() {
       </div>
 
       {/* User list */}
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 min-h-0">
         <div className="flex flex-col gap-1 p-2">
           {users.length === 0 && !isSearching && (
             <div className="text-center text-muted-foreground text-sm py-8">
