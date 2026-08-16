@@ -1,13 +1,14 @@
 "use client";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { authClient } from "@/lib/auth-client";
 import { useEffect, useState, useCallback } from "react";
-import { Search, Edit, Loader2 } from "lucide-react";
+import { Search, Edit, Loader2, UserPlus, Plus, Users, Check, X } from "lucide-react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useOnlineUsers } from "@/hooks/useOnlineUsers";
 import { getSocket } from "@/lib/socket";
 
@@ -78,6 +79,7 @@ function sortUsers(userList: AppUser[]): AppUser[] {
 }
 
 export function Sidebar() {
+  const router = useRouter();
   const params = useParams();
   const selectedId = params.chatId as string | undefined;
   const { data: session } = authClient.useSession();
@@ -87,6 +89,41 @@ export function Sidebar() {
   const [search, setSearch] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+
+  // New Chat / Group Modal states
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalSearch, setModalSearch] = useState("");
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+  const [groupNameInput, setGroupNameInput] = useState("");
+
+  const toggleUserSelection = (userId: string) => {
+    setSelectedUserIds((prev) =>
+      prev.includes(userId)
+        ? prev.filter((id) => id !== userId)
+        : [...prev, userId]
+    );
+  };
+
+  const handleCreateChatOrGroup = () => {
+    if (selectedUserIds.length === 0 || !currentUser) return;
+
+    if (selectedUserIds.length === 1) {
+      const chatId = [currentUser.id, selectedUserIds[0]].sort().join("_vs_");
+      router.push(`/chat/${chatId}`);
+    } else {
+      const sortedUsers = [currentUser.id, ...selectedUserIds].sort();
+      const groupNameQuery = groupNameInput.trim()
+        ? `?name=${encodeURIComponent(groupNameInput.trim())}`
+        : "";
+      const chatId = `group_${sortedUsers.join("_vs_")}${groupNameQuery}`;
+      router.push(`/chat/${chatId}`);
+    }
+
+    setIsModalOpen(false);
+    setSelectedUserIds([]);
+    setGroupNameInput("");
+    setModalSearch("");
+  };
 
   const BACKEND_URL =
     process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
@@ -310,9 +347,22 @@ export function Sidebar() {
             </span>
           </div>
         </div>
-        <button className="p-2 hover:bg-muted rounded-full transition-colors">
-          <Edit className="w-4 h-4 text-muted-foreground" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="p-2 hover:bg-muted rounded-full transition-colors cursor-pointer text-muted-foreground hover:text-foreground"
+            title="New Chat or Group"
+          >
+            <UserPlus className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="p-2 hover:bg-muted rounded-full transition-colors cursor-pointer text-muted-foreground hover:text-foreground"
+            title="Create Group"
+          >
+            <Users className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Search */}
@@ -400,6 +450,156 @@ export function Sidebar() {
           })}
         </div>
       </ScrollArea>
+
+      {/* New Chat / Create Group Modal Dialog */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-background border rounded-2xl shadow-2xl w-full max-w-md flex flex-col max-h-[85vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="p-4 border-b flex items-center justify-between shrink-0">
+              <div>
+                <h3 className="font-semibold text-base">New Chat or Group</h3>
+                <p className="text-xs text-muted-foreground">
+                  Select 1 user for DM, or 2+ users to create a group chat.
+                </p>
+              </div>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted rounded-full transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Search */}
+            <div className="p-3 border-b shrink-0">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="search"
+                  placeholder="Search users..."
+                  className="pl-8 bg-muted/40"
+                  value={modalSearch}
+                  onChange={(e) => setModalSearch(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Optional Group Name input if 2+ selected */}
+            {selectedUserIds.length > 1 && (
+              <div className="p-3 border-b bg-muted/20 shrink-0 flex flex-col gap-1">
+                <label className="text-xs font-semibold text-muted-foreground">
+                  Group Name (Optional)
+                </label>
+                <Input
+                  placeholder="e.g. Design Team, Family, Devs..."
+                  value={groupNameInput}
+                  onChange={(e) => setGroupNameInput(e.target.value)}
+                  className="bg-background text-sm"
+                />
+              </div>
+            )}
+
+            {/* User list with checkboxes */}
+            <ScrollArea className="flex-1 p-2">
+              <div className="flex flex-col gap-1">
+                {users
+                  .filter(
+                    (u) =>
+                      u.name
+                        .toLowerCase()
+                        .includes(modalSearch.toLowerCase()) ||
+                      u.email.toLowerCase().includes(modalSearch.toLowerCase())
+                  )
+                  .map((u) => {
+                    const isSelected = selectedUserIds.includes(u.id);
+                    const isOnline = onlineUserIds.has(u.id);
+                    return (
+                      <div
+                        key={u.id}
+                        onClick={() => toggleUserSelection(u.id)}
+                        className={`flex items-center justify-between p-3 rounded-xl cursor-pointer transition-colors ${
+                          isSelected
+                            ? "bg-primary/10 border border-primary/30"
+                            : "hover:bg-muted"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="relative">
+                            <Avatar className="h-9 w-9">
+                              <AvatarImage src={u.image ?? ""} alt={u.name} />
+                              <AvatarFallback>
+                                {u.name.substring(0, 2).toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                            {isOnline && (
+                              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 border-2 border-background rounded-full"></span>
+                            )}
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="font-medium text-sm">
+                              {u.name}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {u.email}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div
+                          className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${
+                            isSelected
+                              ? "bg-primary border-primary text-primary-foreground"
+                              : "border-muted-foreground/40"
+                          }`}
+                        >
+                          {isSelected && (
+                            <Check className="w-3.5 h-3.5 stroke-[3]" />
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </ScrollArea>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t flex items-center justify-between shrink-0 bg-muted/10">
+              <span className="text-xs text-muted-foreground font-medium">
+                {selectedUserIds.length === 0
+                  ? "No user selected"
+                  : selectedUserIds.length === 1
+                  ? "1 user selected"
+                  : `${selectedUserIds.length} users selected`}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsModalOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={selectedUserIds.length === 0}
+                  onClick={handleCreateChatOrGroup}
+                  className="gap-1.5"
+                >
+                  {selectedUserIds.length > 1 ? (
+                    <>
+                      <Users className="w-4 h-4" />
+                      <span>Create Group ({selectedUserIds.length})</span>
+                    </>
+                  ) : (
+                    <span>Start Chat</span>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
