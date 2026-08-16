@@ -27,7 +27,46 @@ import { useOnlineUsers } from "@/hooks/useOnlineUsers";
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
 
-const EMOJIS = ["👍", "❤️", "😂", "😮"];
+const EMOJIS = [
+  "👍", "❤️", "😂", "😮", "🔥", "🎉", "😢", "👏",
+  "🙏", "😍", "💯", "🚀", "🤣", "💩", "🥳", "✨"
+];
+
+const EMOJI_CATEGORIES = [
+  {
+    name: "Smiles & Expressions",
+    emojis: [
+      "😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "😊", "😇",
+      "🙂", "🙃", "😉", "😌", "😍", "🥰", "😘", "😗", "😙", "😚",
+      "😋", "😛", "😜", "🤪", "🤨", "🧐", "🤓", "😎", "🤩", "🥳",
+      "😏", "😒", "😞", "😔", "😟", "😕", "🙁", "☹️", "😣", "😖",
+      "😫", "😩", "🥺", "😢", "😭", "😤", "😠", "😡", "🤬", "🤯"
+    ],
+  },
+  {
+    name: "Hands & Gestures",
+    emojis: [
+      "👍", "👎", "👊", "✊", "🤛", "🤜", "🤞", "✌️", "🤟", "🤘",
+      "👌", "🤌", "🤏", "👈", "👉", "👆", "👇", "☝️", "✋", "🤚",
+      "🖐️", "🖖", "👋", "🤙", "💪", "✍️", "🙏", "🤝", "👏", "🙌"
+    ],
+  },
+  {
+    name: "Hearts & Symbols",
+    emojis: [
+      "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "🤎", "💔",
+      "❣️", "💕", "💞", "💓", "💗", "💖", "💘", "💝", "✨", "🌟",
+      "⭐", "💫", "🔥", "💥", "🎉", "🎊", "💯", "🚀"
+    ],
+  },
+  {
+    name: "Food & Activities",
+    emojis: [
+      "🍕", "🍔", "🍟", "🌭", "🍿", "☕", "🍺", "🍻", "🥂", "🍾",
+      "🎂", "🎈", "🎁", "⚽", "🏀", "🎮", "🎵", "🎧", "📷", "💡"
+    ],
+  },
+];
 
 const parseReactions = (raw: any): { emoji: string; userId: string }[] => {
   if (Array.isArray(raw)) return raw;
@@ -72,6 +111,34 @@ export function ChatArea({
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
   const [activePickerId, setActivePickerId] = useState<string | null>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+
+  const inputRef = useRef<HTMLInputElement>(null);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        emojiPickerRef.current &&
+        !emojiPickerRef.current.contains(event.target as Node)
+      ) {
+        setShowEmojiPicker(false);
+      }
+    };
+    if (showEmojiPicker) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showEmojiPicker]);
+
+  const handleSelectEmoji = (emoji: string) => {
+    setInputValue((prev) => prev + emoji);
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+  };
 
   // Pagination states
   const [hasMore, setHasMore] = useState(false);
@@ -319,6 +386,7 @@ export function ChatArea({
     }
 
     setInputValue("");
+    setShowEmojiPicker(false);
   };
 
   const handleStartEdit = (msg: any) => {
@@ -510,13 +578,13 @@ export function ChatArea({
                   {/* Quick Floating Emoji Reaction Bar */}
                   {!isDeleted && !isEditingThis && (
                     <div
-                      className={`absolute -top-4 ${
+                      className={`absolute -top-5 ${
                         isMe ? "right-0" : "left-0"
                       } ${
                         isPickerOpen
                           ? "flex"
                           : "hidden group-hover:flex"
-                      } items-center gap-1 bg-background/95 backdrop-blur border shadow-md rounded-full px-2 py-0.5 z-20 animate-in fade-in zoom-in duration-150`}
+                      } items-center gap-1 bg-background/95 backdrop-blur border shadow-md rounded-full px-2.5 py-1 z-20 max-w-[240px] overflow-x-auto overflow-y-hidden scrollbar-none whitespace-nowrap animate-in fade-in zoom-in duration-150`}
                     >
                       {EMOJIS.map((emoji) => {
                         const reactionsList = parseReactions(msg.reactions);
@@ -527,7 +595,7 @@ export function ChatArea({
                           <button
                             key={emoji}
                             onClick={() => handleToggleReaction(msg.id, emoji)}
-                            className={`hover:scale-125 transition-transform p-1 text-sm rounded-full ${
+                            className={`hover:scale-125 transition-transform p-1 text-sm rounded-full shrink-0 ${
                               isMyReaction ? "bg-primary/20 scale-110" : ""
                             }`}
                             title={`React with ${emoji}`}
@@ -696,14 +764,67 @@ export function ChatArea({
       </ScrollArea>
 
       {/* Input */}
-      <div className="p-4 bg-background border-t shrink-0">
+      <div className="p-4 bg-background border-t shrink-0 relative" ref={emojiPickerRef}>
+        {showEmojiPicker && (
+          <div className="absolute bottom-18 left-4 z-30 w-80 bg-background/95 backdrop-blur border rounded-2xl shadow-xl p-3 flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-2 duration-150">
+            <div className="flex items-center justify-between border-b pb-2 px-1 shrink-0">
+              <span className="text-xs font-semibold text-muted-foreground">Emojis</span>
+              <button
+                type="button"
+                onClick={() => setShowEmojiPicker(false)}
+                className="text-muted-foreground hover:text-foreground p-1 rounded-full hover:bg-muted transition-colors cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <div className="max-h-60 overflow-y-auto pr-1 flex flex-col gap-3">
+              {EMOJI_CATEGORIES.map((cat) => (
+                <div key={cat.name}>
+                  <p className="text-[10px] font-semibold text-muted-foreground mb-1 px-1 sticky top-0 bg-background/95 py-1 z-10 backdrop-blur">
+                    {cat.name}
+                  </p>
+                  <div className="grid grid-cols-7 gap-1">
+                    {cat.emojis.map((emoji) => (
+                      <button
+                        key={emoji}
+                        type="button"
+                        onClick={() => handleSelectEmoji(emoji)}
+                        className="h-8 w-8 flex items-center justify-center text-lg rounded-md hover:bg-muted hover:scale-125 transition-all cursor-pointer"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <form className="flex items-center gap-2" onSubmit={handleSend}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowEmojiPicker((prev) => !prev)}
+            className={`rounded-full shrink-0 ${
+              showEmojiPicker
+                ? "text-primary bg-primary/10"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+            title="Add emoji"
+          >
+            <Smile className="h-5 w-5" />
+          </Button>
+
           <Input
+            ref={inputRef}
             placeholder="Type a message..."
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             className="flex-1 rounded-full bg-muted/50 border-transparent focus-visible:ring-primary"
           />
+
           <Button
             type="submit"
             size="icon"
