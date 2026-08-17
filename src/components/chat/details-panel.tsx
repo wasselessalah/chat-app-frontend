@@ -3,12 +3,21 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChatUser, Conversation } from "@/types/chat";
-import { Bell, FileText, Image as ImageIcon, Link2, X, Users, Pencil, Check, LogOut } from "lucide-react";
+import { Bell, FileText, Image as ImageIcon, Link2, X, Users, Pencil, Check, LogOut, Palette } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getSocket } from "@/lib/socket";
+
+const THEMES = [
+  { id: "default", name: "Default", colorClass: "bg-primary" },
+  { id: "blue", name: "Blue", colorClass: "bg-blue-500" },
+  { id: "rose", name: "Rose", colorClass: "bg-rose-500" },
+  { id: "green", name: "Green", colorClass: "bg-green-500" },
+  { id: "violet", name: "Violet", colorClass: "bg-violet-500" },
+  { id: "orange", name: "Orange", colorClass: "bg-orange-500" },
+];
 
 interface DetailsPanelProps {
   conversation: Conversation;
@@ -49,6 +58,17 @@ export function DetailsPanel({
     setIsEditingName(false);
   }, [conversation.id, conversation.name]);
 
+  const parseGroupTheme = (convId: string) => {
+    if (convId.startsWith("group_") && convId.includes("?")) {
+      const params = new URLSearchParams(convId.split("?")[1]);
+      const themeParam = params.get("theme");
+      if (themeParam) return themeParam;
+    }
+    return "default";
+  };
+
+  const currentTheme = parseGroupTheme(conversation.id);
+
   useEffect(() => {
     const socket = getSocket();
     if (!socket) return;
@@ -56,7 +76,7 @@ export function DetailsPanel({
       const cleanTarget = chatId ? chatId.split("?")[0] : "";
       const cleanCurrent = conversation.id.split("?")[0];
       if (cleanTarget === cleanCurrent) {
-        setNameInput(newName);
+        if (newName) setNameInput(newName);
       }
     };
     socket.on("group_renamed", handleGroupRenamed);
@@ -64,6 +84,19 @@ export function DetailsPanel({
       socket.off("group_renamed", handleGroupRenamed);
     };
   }, [conversation.id]);
+
+  const handleUpdateTheme = (newTheme: string) => {
+    if (newTheme === currentTheme) return;
+    const socket = getSocket();
+    if (socket) {
+      socket.emit("rename_group", {
+        chatId: conversation.id,
+        newTheme,
+        userId: currentUser.id,
+        userName: currentUser.name,
+      });
+    }
+  };
 
   const handleSaveName = () => {
     if (!nameInput.trim()) return;
@@ -172,6 +205,34 @@ export function DetailsPanel({
               : otherUser?.email}
           </p>
         </div>
+
+        {isGroup && (
+          <div className="p-4 border-b">
+            <h4 className="text-xs font-semibold mb-3 text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+              <Palette className="w-4 h-4" /> Theme Color
+            </h4>
+            <div className="flex flex-wrap gap-3">
+              {THEMES.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => handleUpdateTheme(t.id)}
+                  title={t.name}
+                  className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+                    t.colorClass
+                  } ${
+                    currentTheme === t.id
+                      ? "ring-2 ring-offset-2 ring-primary scale-110"
+                      : "hover:scale-110 opacity-70 hover:opacity-100"
+                  }`}
+                >
+                  {currentTheme === t.id && (
+                    <Check className="w-3.5 h-3.5 text-white" />
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Group members list if group */}
         {isGroup && (

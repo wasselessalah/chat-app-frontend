@@ -118,7 +118,6 @@ export function ChatArea({
 
   const [isEditingGroupName, setIsEditingGroupName] = useState(false);
 
-  // Parse the group name from the URL param (e.g. ?name=My%20Group)
   const parseGroupName = (convId: string, convName?: string | null) => {
     if (convName) return convName;
     if (convId.startsWith("group_") && convId.includes("?")) {
@@ -129,6 +128,29 @@ export function ChatArea({
     }
     return "";
   };
+
+  const parseGroupTheme = (convId: string) => {
+    if (convId.startsWith("group_") && convId.includes("?")) {
+      const queryPart = convId.split("?")[1];
+      const params = new URLSearchParams(queryPart);
+      const themeParam = params.get("theme");
+      if (themeParam) return themeParam;
+    }
+    return "default";
+  };
+
+  const theme = parseGroupTheme(conversation.id);
+  const getThemeColorClass = (theme: string) => {
+    switch(theme) {
+      case "rose": return "bg-rose-500 text-white";
+      case "blue": return "bg-blue-500 text-white";
+      case "green": return "bg-green-500 text-white";
+      case "violet": return "bg-violet-500 text-white";
+      case "orange": return "bg-orange-500 text-white";
+      default: return "bg-primary text-primary-foreground";
+    }
+  };
+  const themeColorClass = getThemeColorClass(theme);
 
   const [groupNameInput, setGroupNameInput] = useState(
     parseGroupName(conversation.id, conversation.name)
@@ -333,11 +355,11 @@ export function ChatArea({
       }
     };
 
-    const handleGroupRenamed = ({ chatId, newChatId, newName, systemMessage }: any) => {
+    const handleGroupRenamed = ({ chatId, newChatId, newName, newTheme, systemMessage }: any) => {
       const cleanTarget = chatId ? chatId.split("?")[0] : "";
       const cleanCurrent = conversation.id.split("?")[0];
       if (cleanTarget === cleanCurrent) {
-        setGroupNameInput(newName);
+        if (newName) setGroupNameInput(newName);
         if (systemMessage) {
           setMessages((prev) => {
             if (prev.some((m) => m.id === systemMessage.id)) return prev;
@@ -689,7 +711,10 @@ export function ChatArea({
               msg.isSystem ||
               msg.senderId === "system" ||
               (typeof msg.content === "string" &&
-                (msg.content.includes("renamed the group to") || msg.content.includes("created the group") || msg.content.includes("left the group")));
+                (msg.content.includes("renamed the group to") || 
+                 msg.content.includes("changed the group theme to") || 
+                 msg.content.includes("created the group") || 
+                 msg.content.includes("left the group")));
 
             if (isSystemMsg) {
               return (
@@ -833,7 +858,7 @@ export function ChatArea({
                     <div
                       className={`relative group/msg px-4 py-2 rounded-2xl ${
                         isMe
-                          ? "bg-primary text-primary-foreground rounded-br-sm"
+                          ? `${themeColorClass} rounded-br-sm`
                           : "bg-muted rounded-bl-sm"
                       }`}
                     >
