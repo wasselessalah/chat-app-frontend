@@ -350,12 +350,27 @@ export function ChatArea({
       }
     };
 
+    const handleUserLeftGroup = ({ chatId, newChatId, userId }: any) => {
+      const cleanTarget = chatId ? chatId.split("?")[0] : "";
+      const cleanCurrent = conversation.id.split("?")[0];
+      if (cleanTarget === cleanCurrent) {
+        if (userId === currentUser.id) {
+          router.push("/chat");
+        } else {
+          if (newChatId) {
+            router.replace(`/chat/${newChatId}`);
+          }
+        }
+      }
+    };
+
     socket.on("receive_message", handleReceiveMessage);
     socket.on("messages_read", handleMessagesRead);
     socket.on("message_updated", handleMessageUpdated);
     socket.on("message_deleted", handleMessageDeleted);
     socket.on("message_reacted", handleMessageReacted);
     socket.on("group_renamed", handleGroupRenamed);
+    socket.on("user_left_group", handleUserLeftGroup);
 
     return () => {
       socket.off("receive_message", handleReceiveMessage);
@@ -363,6 +378,8 @@ export function ChatArea({
       socket.off("message_updated", handleMessageUpdated);
       socket.off("message_deleted", handleMessageDeleted);
       socket.off("message_reacted", handleMessageReacted);
+      socket.off("group_renamed", handleGroupRenamed);
+      socket.off("user_left_group", handleUserLeftGroup);
     };
   }, [conversation.id, currentUser.id, BACKEND_URL]);
 
@@ -672,7 +689,7 @@ export function ChatArea({
               msg.isSystem ||
               msg.senderId === "system" ||
               (typeof msg.content === "string" &&
-                msg.content.includes("renamed the group to"));
+                (msg.content.includes("renamed the group to") || msg.content.includes("created the group") || msg.content.includes("left the group")));
 
             if (isSystemMsg) {
               return (

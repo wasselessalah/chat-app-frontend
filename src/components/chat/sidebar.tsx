@@ -193,6 +193,11 @@ export function Sidebar() {
         ),
       ]);
       router.push(`/chat/${chatId}`);
+
+      const socket = getSocket();
+      if (socket) {
+        socket.emit("create_group", newGroup);
+      }
     }
 
     setIsModalOpen(false);
@@ -394,11 +399,49 @@ export function Sidebar() {
       );
     };
 
+    const handleGroupCreated = (newGroup: GroupConversation) => {
+      setGroups((prevGroups) => {
+        const exists = prevGroups.some(
+          (g) => g.chatId.split("?")[0] === newGroup.chatId.split("?")[0]
+        );
+        if (!exists) {
+          return [newGroup, ...prevGroups];
+        }
+        return prevGroups;
+      });
+    };
+
+    const handleUserLeftGroup = ({ chatId, newChatId, userId }: any) => {
+      if (userId === currentUser.id) {
+        setGroups((prevGroups) =>
+          prevGroups.filter((g) => g.chatId.split("?")[0] !== chatId.split("?")[0])
+        );
+      } else {
+        setGroups((prevGroups) =>
+          prevGroups.map((g) => {
+            if (g.chatId.split("?")[0] === chatId.split("?")[0]) {
+              return {
+                ...g,
+                chatId: newChatId,
+                memberIds: g.memberIds.filter((id) => id !== userId),
+                members: g.members.filter((m) => m.id !== userId),
+              };
+            }
+            return g;
+          })
+        );
+      }
+    };
+
     socket.on("receive_message", handleReceiveMessage);
     socket.on("group_renamed", handleGroupRenamed);
+    socket.on("group_created", handleGroupCreated);
+    socket.on("user_left_group", handleUserLeftGroup);
     return () => {
       socket.off("receive_message", handleReceiveMessage);
       socket.off("group_renamed", handleGroupRenamed);
+      socket.off("group_created", handleGroupCreated);
+      socket.off("user_left_group", handleUserLeftGroup);
     };
   }, [selectedId, currentUser]);
 

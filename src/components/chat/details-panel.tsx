@@ -3,7 +3,7 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChatUser, Conversation } from "@/types/chat";
-import { Bell, FileText, Image as ImageIcon, Link2, X, Users, Pencil, Check } from "lucide-react";
+import { Bell, FileText, Image as ImageIcon, Link2, X, Users, Pencil, Check, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useState, useEffect } from "react";
@@ -80,6 +80,19 @@ export function DetailsPanel({
     const newChatId = `${baseId}?name=${encodeURIComponent(nameInput.trim())}`;
     router.push(`/chat/${newChatId}`);
     setIsEditingName(false);
+  };
+
+  const handleLeaveGroup = () => {
+    const socket = getSocket();
+    if (socket) {
+      socket.emit("leave_group", {
+        chatId: conversation.id,
+        userId: currentUser.id,
+        userName: currentUser.name,
+      });
+    }
+    router.push("/chat");
+    onClose();
   };
 
   const getAvatar = (user: ChatUser) => user.image || user.avatar || "";
@@ -202,6 +215,16 @@ export function DetailsPanel({
             <Bell className="mr-3 h-5 w-5" />
             Mute Notifications
           </Button>
+          {isGroup && (
+            <Button
+              variant="ghost"
+              onClick={handleLeaveGroup}
+              className="w-full justify-start text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50"
+            >
+              <LogOut className="mr-3 h-5 w-5" />
+              Leave Group
+            </Button>
+          )}
         </div>
 
         <div className="p-4">
