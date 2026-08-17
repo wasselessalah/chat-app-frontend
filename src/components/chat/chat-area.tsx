@@ -22,6 +22,7 @@ import {
   Users,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { getSocket } from "@/lib/socket";
 import { useOnlineUsers } from "@/hooks/useOnlineUsers";
 
@@ -107,12 +108,58 @@ export function ChatArea({
   currentUser,
   onToggleDetails,
 }: ChatAreaProps) {
+  const router = useRouter();
   const [inputValue, setInputValue] = useState("");
   const [messages, setMessages] = useState<any[]>([]);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
   const [activePickerId, setActivePickerId] = useState<string | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+
+  const [isEditingGroupName, setIsEditingGroupName] = useState(false);
+
+  const parseGroupName = (convId: string, convName?: string | null) => {
+    if (convName) return convName;
+    if (convId.startsWith("group_") && convId.includes("?")) {
+      const queryPart = convId.split("?")[1];
+      const params = new URLSearchParams(queryPart);
+      const nameParam = params.get("name");
+      if (nameParam) return nameParam;
+    }
+    return "";
+  };
+
+  const parseGroupTheme = (convId: string) => {
+    if (convId.startsWith("group_") && convId.includes("?")) {
+      const queryPart = convId.split("?")[1];
+      const params = new URLSearchParams(queryPart);
+      const themeParam = params.get("theme");
+      if (themeParam) return themeParam;
+    }
+    return "default";
+  };
+
+  const theme = parseGroupTheme(conversation.id);
+  const getThemeColorClass = (theme: string) => {
+    switch(theme) {
+      case "rose": return "bg-rose-500 text-white";
+      case "blue": return "bg-blue-500 text-white";
+      case "green": return "bg-green-500 text-white";
+      case "violet": return "bg-violet-500 text-white";
+      case "orange": return "bg-orange-500 text-white";
+      default: return "bg-primary text-primary-foreground";
+    }
+  };
+  const themeColorClass = getThemeColorClass(theme);
+
+  const [groupNameInput, setGroupNameInput] = useState(
+    parseGroupName(conversation.id, conversation.name)
+  );
+
+  useEffect(() => {
+    setGroupNameInput(parseGroupName(conversation.id, conversation.name));
+    setIsEditingGroupName(false);
+  }, [conversation.id, conversation.name]);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
@@ -177,7 +224,7 @@ export function ChatArea({
     const fetchMessages = async () => {
       try {
         const res = await fetch(
-          `${BACKEND_URL}/api/messages?chatId=${conversation.id}&limit=15`
+          `${BACKEND_URL}/api/messages?chatId=${conversation.id}&userId=${currentUser.id}&limit=15`
         );
         if (res.ok) {
           const data = await res.json();
@@ -308,11 +355,44 @@ export function ChatArea({
       }
     };
 
+    const handleGroupRenamed = ({ chatId, newChatId, newName, newTheme, systemMessage }: any) => {
+      const cleanTarget = chatId ? chatId.split("?")[0] : "";
+      const cleanCurrent = conversation.id.split("?")[0];
+      if (cleanTarget === cleanCurrent) {
+        if (newName) setGroupNameInput(newName);
+        if (systemMessage) {
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === systemMessage.id)) return prev;
+            return [...prev, systemMessage];
+          });
+        }
+        if (newChatId) {
+          router.replace(`/chat/${newChatId}`);
+        }
+      }
+    };
+
+    const handleUserLeftGroup = ({ chatId, newChatId, userId }: any) => {
+      const cleanTarget = chatId ? chatId.split("?")[0] : "";
+      const cleanCurrent = conversation.id.split("?")[0];
+      if (cleanTarget === cleanCurrent) {
+        if (userId === currentUser.id) {
+          router.push("/chat");
+        } else {
+          if (newChatId) {
+            router.replace(`/chat/${newChatId}`);
+          }
+        }
+      }
+    };
+
     socket.on("receive_message", handleReceiveMessage);
     socket.on("messages_read", handleMessagesRead);
     socket.on("message_updated", handleMessageUpdated);
     socket.on("message_deleted", handleMessageDeleted);
     socket.on("message_reacted", handleMessageReacted);
+    socket.on("group_renamed", handleGroupRenamed);
+    socket.on("user_left_group", handleUserLeftGroup);
 
     return () => {
       socket.off("receive_message", handleReceiveMessage);
@@ -320,6 +400,8 @@ export function ChatArea({
       socket.off("message_updated", handleMessageUpdated);
       socket.off("message_deleted", handleMessageDeleted);
       socket.off("message_reacted", handleMessageReacted);
+      socket.off("group_renamed", handleGroupRenamed);
+      socket.off("user_left_group", handleUserLeftGroup);
     };
   }, [conversation.id, currentUser.id, BACKEND_URL]);
 
@@ -334,7 +416,7 @@ export function ChatArea({
       const res = await fetch(
         `${BACKEND_URL}/api/messages?chatId=${
           conversation.id
-        }&limit=15&before=${encodeURIComponent(nextCursor)}`
+        }&userId=${currentUser.id}&limit=15&before=${encodeURIComponent(nextCursor)}`
       );
       if (res.ok) {
         const data = await res.json();
@@ -469,12 +551,82 @@ export function ChatArea({
             )}
           </div>
           <div>
-            <h2 className="font-semibold text-sm">
-              {isGroup
-                ? conversation.name ||
-                  otherUsers.map((u) => u.name).join(", ")
-                : getDisplayName(otherUser || currentUser)}
-            </h2>
+            {isEditingGroupName ? (
+              <div className="flex items-center gap-1.5">
+                <Input
+                  value={groupNameInput}
+                  onChange={(e) => setGroupNameInput(e.target.value)}
+                  className="h-7 text-xs bg-background w-44"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      if (!groupNameInput.trim()) return;
+                      const cleanName = groupNameInput.trim();
+                      const socket = getSocket();
+                      if (socket) {
+                        socket.emit("rename_group", {
+                          chatId: conversation.id,
+                          newName: cleanName,
+                          userId: currentUser.id,
+                          userName: currentUser.name,
+                        });
+                      }
+                      const [baseId] = conversation.id.split("?");
+                      const newChatId = `${baseId}?name=${encodeURIComponent(cleanName)}`;
+                      setGroupNameInput(cleanName);
+                      router.push(`/chat/${newChatId}`);
+                      setIsEditingGroupName(false);
+                    }
+                    if (e.key === "Escape") setIsEditingGroupName(false);
+                  }}
+                />
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 text-green-600 shrink-0"
+                  onClick={() => {
+                    if (!groupNameInput.trim()) return;
+                    const cleanName = groupNameInput.trim();
+                    const socket = getSocket();
+                    if (socket) {
+                      socket.emit("rename_group", {
+                        chatId: conversation.id,
+                        newName: cleanName,
+                        userId: currentUser.id,
+                        userName: currentUser.name,
+                      });
+                    }
+                    const [baseId] = conversation.id.split("?");
+                    const newChatId = `${baseId}?name=${encodeURIComponent(cleanName)}`;
+                    setGroupNameInput(cleanName);
+                    router.push(`/chat/${newChatId}`);
+                    setIsEditingGroupName(false);
+                  }}
+                >
+                  <Check className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <h2 className="font-semibold text-sm">
+                  {isGroup
+                    ? groupNameInput || "Group Chat"
+                    : getDisplayName(otherUser || currentUser)}
+                </h2>
+                {isGroup && (
+                  <button
+                    onClick={() => {
+                      setGroupNameInput(groupNameInput || "Group Chat");
+                      setIsEditingGroupName(true);
+                    }}
+                    className="p-1 text-muted-foreground hover:text-foreground rounded-full hover:bg-muted transition-colors cursor-pointer"
+                    title="Rename Group"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
             <p className="text-xs text-muted-foreground flex items-center gap-1">
               {isGroup ? (
                 <span>{conversation.participants.length} members</span>
@@ -555,6 +707,28 @@ export function ChatArea({
             </div>
           )}
           {messages.map((msg, idx) => {
+            const isSystemMsg =
+              msg.isSystem ||
+              msg.senderId === "system" ||
+              (typeof msg.content === "string" &&
+                (msg.content.includes("renamed the group to") || 
+                 msg.content.includes("changed the group theme to") || 
+                 msg.content.includes("created the group") || 
+                 msg.content.includes("left the group")));
+
+            if (isSystemMsg) {
+              return (
+                <div key={msg.id || idx} className="flex justify-center my-3">
+                  <div className="text-xs text-muted-foreground bg-muted/80 backdrop-blur px-3.5 py-1.5 rounded-full border border-border/50 font-medium shadow-2xs text-center max-w-[85%]">
+                    <span className="font-semibold text-foreground">
+                      {msg.senderName || "A member"}
+                    </span>{" "}
+                    {msg.content}
+                  </div>
+                </div>
+              );
+            }
+
             const isMe = msg.senderId === currentUser.id;
             const isDeleted =
               msg.isDeleted || msg.content === "This message was deleted";
@@ -684,7 +858,7 @@ export function ChatArea({
                     <div
                       className={`relative group/msg px-4 py-2 rounded-2xl ${
                         isMe
-                          ? "bg-primary text-primary-foreground rounded-br-sm"
+                          ? `${themeColorClass} rounded-br-sm`
                           : "bg-muted rounded-bl-sm"
                       }`}
                     >
