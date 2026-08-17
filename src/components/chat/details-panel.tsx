@@ -3,8 +3,12 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChatUser, Conversation } from "@/types/chat";
-import { Bell, FileText, Image as ImageIcon, Link2, X, Users } from "lucide-react";
+import { Bell, FileText, Image as ImageIcon, Link2, X, Users, Pencil, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { getSocket } from "@/lib/socket";
 
 interface DetailsPanelProps {
   conversation: Conversation;
@@ -17,11 +21,66 @@ export function DetailsPanel({
   currentUser,
   onClose,
 }: DetailsPanelProps) {
+  const router = useRouter();
   const isGroup = conversation.isGroup || conversation.participants.length > 2;
   const otherUsers = conversation.participants.filter(
     (p) => p.id !== currentUser.id
   );
   const otherUser = otherUsers[0];
+
+  const parseGroupName = (convId: string, convName?: string | null) => {
+    if (convName) return convName;
+    if (convId.startsWith("group_") && convId.includes("?")) {
+      const params = new URLSearchParams(convId.split("?")[1]);
+      const nameParam = params.get("name");
+      if (nameParam) return nameParam;
+    }
+    return "";
+  };
+
+  const defaultGroupName = parseGroupName(conversation.id, conversation.name) || "Group Chat";
+
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState(defaultGroupName);
+
+  useEffect(() => {
+    const resolved = parseGroupName(conversation.id, conversation.name) || "Group Chat";
+    setNameInput(resolved);
+    setIsEditingName(false);
+  }, [conversation.id, conversation.name]);
+
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+    const handleGroupRenamed = ({ chatId, newName }: any) => {
+      const cleanTarget = chatId ? chatId.split("?")[0] : "";
+      const cleanCurrent = conversation.id.split("?")[0];
+      if (cleanTarget === cleanCurrent) {
+        setNameInput(newName);
+      }
+    };
+    socket.on("group_renamed", handleGroupRenamed);
+    return () => {
+      socket.off("group_renamed", handleGroupRenamed);
+    };
+  }, [conversation.id]);
+
+  const handleSaveName = () => {
+    if (!nameInput.trim()) return;
+    const socket = getSocket();
+    if (socket) {
+      socket.emit("rename_group", {
+        chatId: conversation.id,
+        newName: nameInput.trim(),
+        userId: currentUser.id,
+        userName: currentUser.name,
+      });
+    }
+    const [baseId] = conversation.id.split("?");
+    const newChatId = `${baseId}?name=${encodeURIComponent(nameInput.trim())}`;
+    router.push(`/chat/${newChatId}`);
+    setIsEditingName(false);
+  };
 
   const getAvatar = (user: ChatUser) => user.image || user.avatar || "";
 
@@ -57,11 +116,43 @@ export function DetailsPanel({
             </Avatar>
           )}
 
-          <h2 className="text-base font-semibold">
-            {isGroup
-              ? conversation.name || "Group Chat"
-              : otherUser?.name}
-          </h2>
+          {isEditingName && isGroup ? (
+            <div className="flex items-center gap-1.5 mt-1 w-full max-w-[200px]">
+              <Input
+                value={nameInput}
+                onChange={(e) => setNameInput(e.target.value)}
+                className="h-8 text-xs bg-background"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSaveName();
+                  if (e.key === "Escape") setIsEditingName(false);
+                }}
+              />
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7 text-green-600 shrink-0"
+                onClick={handleSaveName}
+              >
+                <Check className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 justify-center group mt-1">
+              <h2 className="text-base font-semibold">
+                {isGroup ? nameInput : otherUser?.name}
+              </h2>
+              {isGroup && (
+                <button
+                  onClick={() => setIsEditingName(true)}
+                  className="opacity-60 hover:opacity-100 p-1 text-muted-foreground hover:text-foreground transition-opacity cursor-pointer"
+                  title="Rename Group"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          )}
           <p className="text-xs text-muted-foreground mt-0.5">
             {isGroup
               ? `${conversation.participants.length} members`

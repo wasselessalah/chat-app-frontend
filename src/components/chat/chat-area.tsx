@@ -22,6 +22,7 @@ import {
   Users,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { getSocket } from "@/lib/socket";
 import { useOnlineUsers } from "@/hooks/useOnlineUsers";
 
@@ -107,12 +108,36 @@ export function ChatArea({
   currentUser,
   onToggleDetails,
 }: ChatAreaProps) {
+  const router = useRouter();
   const [inputValue, setInputValue] = useState("");
   const [messages, setMessages] = useState<any[]>([]);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
   const [activePickerId, setActivePickerId] = useState<string | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+
+  const [isEditingGroupName, setIsEditingGroupName] = useState(false);
+
+  // Parse the group name from the URL param (e.g. ?name=My%20Group)
+  const parseGroupName = (convId: string, convName?: string | null) => {
+    if (convName) return convName;
+    if (convId.startsWith("group_") && convId.includes("?")) {
+      const queryPart = convId.split("?")[1];
+      const params = new URLSearchParams(queryPart);
+      const nameParam = params.get("name");
+      if (nameParam) return nameParam;
+    }
+    return "";
+  };
+
+  const [groupNameInput, setGroupNameInput] = useState(
+    parseGroupName(conversation.id, conversation.name)
+  );
+
+  useEffect(() => {
+    setGroupNameInput(parseGroupName(conversation.id, conversation.name));
+    setIsEditingGroupName(false);
+  }, [conversation.id, conversation.name]);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
@@ -308,11 +333,29 @@ export function ChatArea({
       }
     };
 
+    const handleGroupRenamed = ({ chatId, newChatId, newName, systemMessage }: any) => {
+      const cleanTarget = chatId ? chatId.split("?")[0] : "";
+      const cleanCurrent = conversation.id.split("?")[0];
+      if (cleanTarget === cleanCurrent) {
+        setGroupNameInput(newName);
+        if (systemMessage) {
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === systemMessage.id)) return prev;
+            return [...prev, systemMessage];
+          });
+        }
+        if (newChatId) {
+          router.replace(`/chat/${newChatId}`);
+        }
+      }
+    };
+
     socket.on("receive_message", handleReceiveMessage);
     socket.on("messages_read", handleMessagesRead);
     socket.on("message_updated", handleMessageUpdated);
     socket.on("message_deleted", handleMessageDeleted);
     socket.on("message_reacted", handleMessageReacted);
+    socket.on("group_renamed", handleGroupRenamed);
 
     return () => {
       socket.off("receive_message", handleReceiveMessage);
@@ -469,12 +512,82 @@ export function ChatArea({
             )}
           </div>
           <div>
-            <h2 className="font-semibold text-sm">
-              {isGroup
-                ? conversation.name ||
-                  otherUsers.map((u) => u.name).join(", ")
-                : getDisplayName(otherUser || currentUser)}
-            </h2>
+            {isEditingGroupName ? (
+              <div className="flex items-center gap-1.5">
+                <Input
+                  value={groupNameInput}
+                  onChange={(e) => setGroupNameInput(e.target.value)}
+                  className="h-7 text-xs bg-background w-44"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      if (!groupNameInput.trim()) return;
+                      const cleanName = groupNameInput.trim();
+                      const socket = getSocket();
+                      if (socket) {
+                        socket.emit("rename_group", {
+                          chatId: conversation.id,
+                          newName: cleanName,
+                          userId: currentUser.id,
+                          userName: currentUser.name,
+                        });
+                      }
+                      const [baseId] = conversation.id.split("?");
+                      const newChatId = `${baseId}?name=${encodeURIComponent(cleanName)}`;
+                      setGroupNameInput(cleanName);
+                      router.push(`/chat/${newChatId}`);
+                      setIsEditingGroupName(false);
+                    }
+                    if (e.key === "Escape") setIsEditingGroupName(false);
+                  }}
+                />
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 text-green-600 shrink-0"
+                  onClick={() => {
+                    if (!groupNameInput.trim()) return;
+                    const cleanName = groupNameInput.trim();
+                    const socket = getSocket();
+                    if (socket) {
+                      socket.emit("rename_group", {
+                        chatId: conversation.id,
+                        newName: cleanName,
+                        userId: currentUser.id,
+                        userName: currentUser.name,
+                      });
+                    }
+                    const [baseId] = conversation.id.split("?");
+                    const newChatId = `${baseId}?name=${encodeURIComponent(cleanName)}`;
+                    setGroupNameInput(cleanName);
+                    router.push(`/chat/${newChatId}`);
+                    setIsEditingGroupName(false);
+                  }}
+                >
+                  <Check className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <h2 className="font-semibold text-sm">
+                  {isGroup
+                    ? groupNameInput || "Group Chat"
+                    : getDisplayName(otherUser || currentUser)}
+                </h2>
+                {isGroup && (
+                  <button
+                    onClick={() => {
+                      setGroupNameInput(groupNameInput || "Group Chat");
+                      setIsEditingGroupName(true);
+                    }}
+                    className="p-1 text-muted-foreground hover:text-foreground rounded-full hover:bg-muted transition-colors cursor-pointer"
+                    title="Rename Group"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
             <p className="text-xs text-muted-foreground flex items-center gap-1">
               {isGroup ? (
                 <span>{conversation.participants.length} members</span>
@@ -555,6 +668,25 @@ export function ChatArea({
             </div>
           )}
           {messages.map((msg, idx) => {
+            const isSystemMsg =
+              msg.isSystem ||
+              msg.senderId === "system" ||
+              (typeof msg.content === "string" &&
+                msg.content.includes("renamed the group to"));
+
+            if (isSystemMsg) {
+              return (
+                <div key={msg.id || idx} className="flex justify-center my-3">
+                  <div className="text-xs text-muted-foreground bg-muted/80 backdrop-blur px-3.5 py-1.5 rounded-full border border-border/50 font-medium shadow-2xs text-center max-w-[85%]">
+                    <span className="font-semibold text-foreground">
+                      {msg.senderName || "A member"}
+                    </span>{" "}
+                    {msg.content}
+                  </div>
+                </div>
+              );
+            }
+
             const isMe = msg.senderId === currentUser.id;
             const isDeleted =
               msg.isDeleted || msg.content === "This message was deleted";

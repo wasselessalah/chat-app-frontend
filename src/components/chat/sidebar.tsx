@@ -23,7 +23,7 @@ interface AppUser {
   id: string;
   name: string;
   email: string;
-  image: string | null;
+  image?: string | null;
   lastMessage?: LastMessage | null;
 }
 
@@ -89,6 +89,46 @@ function sortUsers(userList: AppUser[]): AppUser[] {
   });
 }
 
+function parseGroupFromId(
+  chatId: string,
+  availableUsers: AppUser[],
+  currentUser?: { id: string; name: string; email: string; image?: string | null }
+): GroupConversation | null {
+  if (!chatId || !chatId.startsWith("group_")) return null;
+  const [idPart, queryPart] = chatId.split("?");
+  const urlParams = new URLSearchParams(queryPart || "");
+  const customName = urlParams.get("name");
+  const memberIds = idPart.replace("group_", "").split("_vs_");
+
+  const membersMap = new Map<string, AppUser>();
+  if (currentUser) {
+    membersMap.set(currentUser.id, {
+      id: currentUser.id,
+      name: currentUser.name,
+      email: currentUser.email,
+      image: currentUser.image || null,
+    });
+  }
+  availableUsers.forEach((u) => membersMap.set(u.id, u));
+
+  const members: AppUser[] = memberIds.map(
+    (id) =>
+      membersMap.get(id) || {
+        id,
+        name: id.substring(0, 6),
+        email: "",
+        image: null,
+      }
+  );
+
+  return {
+    chatId,
+    name: customName || null,
+    memberIds,
+    members,
+  };
+}
+
 export function Sidebar() {
   const router = useRouter();
   const params = useParams();
@@ -129,6 +169,29 @@ export function Sidebar() {
         ? `?name=${encodeURIComponent(groupNameInput.trim())}`
         : "";
       const chatId = `group_${sortedUsers.join("_vs_")}${groupNameQuery}`;
+
+      const selectedUsers = users.filter((u) => selectedUserIds.includes(u.id));
+      const newGroup: GroupConversation = {
+        chatId,
+        name: groupNameInput.trim() || null,
+        memberIds: sortedUsers,
+        members: [
+          {
+            id: currentUser.id,
+            name: currentUser.name,
+            email: currentUser.email,
+            image: currentUser.image || null,
+          },
+          ...selectedUsers,
+        ],
+      };
+
+      setGroups((prev) => [
+        newGroup,
+        ...prev.filter(
+          (g) => g.chatId.split("?")[0] !== chatId.split("?")[0]
+        ),
+      ]);
       router.push(`/chat/${chatId}`);
     }
 
@@ -211,6 +274,24 @@ export function Sidebar() {
     fetchGroups();
   }, [fetchUsers, fetchUnreadCounts, fetchGroups]);
 
+  // Ensure current active group from URL is always in state
+  useEffect(() => {
+    if (selectedId && selectedId.startsWith("group_")) {
+      setGroups((prevGroups) => {
+        const exists = prevGroups.some(
+          (g) => g.chatId.split("?")[0] === selectedId.split("?")[0]
+        );
+        if (!exists) {
+          const newGroup = parseGroupFromId(selectedId, users, currentUser);
+          if (newGroup) {
+            return [newGroup, ...prevGroups];
+          }
+        }
+        return prevGroups;
+      });
+    }
+  }, [selectedId, users, currentUser]);
+
   // Debounced search
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -232,6 +313,41 @@ export function Sidebar() {
             [newMessage.senderId]: (prev[newMessage.senderId] || 0) + 1,
           }));
         }
+      }
+
+      if (newMessage.chatId && newMessage.chatId.startsWith("group_")) {
+        setGroups((prevGroups) => {
+          let found = false;
+          const updated = prevGroups.map((g) => {
+            if (g.chatId.split("?")[0] === newMessage.chatId.split("?")[0]) {
+              found = true;
+              return {
+                ...g,
+                lastMessage: {
+                  content: newMessage.content,
+                  createdAt: newMessage.createdAt || new Date().toISOString(),
+                  senderId: newMessage.senderId,
+                  senderName: newMessage.senderName,
+                },
+              };
+            }
+            return g;
+          });
+
+          if (!found) {
+            const newG = parseGroupFromId(newMessage.chatId, users, currentUser);
+            if (newG) {
+              newG.lastMessage = {
+                content: newMessage.content,
+                createdAt: newMessage.createdAt || new Date().toISOString(),
+                senderId: newMessage.senderId,
+                senderName: newMessage.senderName,
+              };
+              return [newG, ...updated];
+            }
+          }
+          return updated;
+        });
       }
 
       const otherUserId = newMessage.chatId
@@ -260,9 +376,29 @@ export function Sidebar() {
       }
     };
 
+    const handleGroupRenamed = ({ chatId, newName }: any) => {
+      setGroups((prevGroups) =>
+        prevGroups.map((g) => {
+          const cleanTarget = chatId.split("?")[0];
+          const cleanCurrent = g.chatId.split("?")[0];
+          if (cleanTarget === cleanCurrent) {
+            const [baseId] = g.chatId.split("?");
+            return {
+              ...g,
+              chatId: `${baseId}?name=${encodeURIComponent(newName)}`,
+              name: newName,
+            };
+          }
+          return g;
+        })
+      );
+    };
+
     socket.on("receive_message", handleReceiveMessage);
+    socket.on("group_renamed", handleGroupRenamed);
     return () => {
       socket.off("receive_message", handleReceiveMessage);
+      socket.off("group_renamed", handleGroupRenamed);
     };
   }, [selectedId, currentUser]);
 
@@ -388,7 +524,9 @@ export function Sidebar() {
                   return gName.toLowerCase().includes(search.toLowerCase());
                 })
                 .map((group) => {
-                  const isSelected = selectedId === group.chatId;
+                  const isSelected = selectedId
+                    ? selectedId.split("?")[0] === group.chatId.split("?")[0]
+                    : false;
                   const groupName =
                     group.name ||
                     group.members.map((m) => m.name).join(", ") ||
