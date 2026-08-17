@@ -202,7 +202,7 @@ export function ChatArea({
     const fetchMessages = async () => {
       try {
         const res = await fetch(
-          `${BACKEND_URL}/api/messages?chatId=${conversation.id}&limit=15`
+          `${BACKEND_URL}/api/messages?chatId=${conversation.id}&userId=${currentUser.id}&limit=15`
         );
         if (res.ok) {
           const data = await res.json();
@@ -394,7 +394,7 @@ export function ChatArea({
       const res = await fetch(
         `${BACKEND_URL}/api/messages?chatId=${
           conversation.id
-        }&limit=15&before=${encodeURIComponent(nextCursor)}`
+        }&userId=${currentUser.id}&limit=15&before=${encodeURIComponent(nextCursor)}`
       );
       if (res.ok) {
         const data = await res.json();

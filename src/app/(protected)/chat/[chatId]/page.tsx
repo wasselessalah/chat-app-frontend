@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { ChatArea } from "@/components/chat/chat-area";
 import { DetailsPanel } from "@/components/chat/details-panel";
-import { useParams } from "next/navigation";
+import { useParams, notFound } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { ChatUser } from "@/types/chat";
 
@@ -30,6 +30,14 @@ export default function ChatDetailPage() {
       const explicitName = urlParams.get("name");
 
       const rawIds = idPart.replace("group_", "").split("_vs_");
+
+      // Authorization Check: Only members can view this group
+      if (!rawIds.includes(currentUser.id)) {
+        setParticipants([]);
+        setLoading(false);
+        return;
+      }
+
       const otherUserIds = rawIds.filter((id) => id !== currentUser.id);
 
       Promise.all(
@@ -56,6 +64,14 @@ export default function ChatDetailPage() {
     } else {
       // 1-on-1 Chat ID format: id1_vs_id2
       const parts = chatId.split("_vs_");
+
+      // Authorization Check: Only participants can view this chat
+      if (!parts.includes(currentUser.id)) {
+        setParticipants([]);
+        setLoading(false);
+        return;
+      }
+
       const otherUserId = parts.find((id) => id !== currentUser.id);
 
       if (otherUserId) {
@@ -89,17 +105,8 @@ export default function ChatDetailPage() {
     );
   }
 
-  if (participants.length === 0) {
-    return (
-      <div className="flex-1 flex items-center justify-center bg-muted/20">
-        <div className="text-center">
-          <h2 className="text-xl font-semibold mb-2">Chat Not Found</h2>
-          <p className="text-muted-foreground">
-            This user or group chat does not exist.
-          </p>
-        </div>
-      </div>
-    );
+  if (participants.length === 0 && !loading) {
+    notFound();
   }
 
   const mappedCurrentUser: ChatUser = {
