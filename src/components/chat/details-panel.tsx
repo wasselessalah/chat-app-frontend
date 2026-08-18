@@ -3,7 +3,7 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChatUser, Conversation } from "@/types/chat";
-import { Bell, FileText, Image as ImageIcon, Link2, X, Users, Pencil, Check, LogOut, Palette } from "lucide-react";
+import { Bell, FileText, Image as ImageIcon, Link2, X, Users, Pencil, Check, LogOut, Palette, ShieldAlert, UserMinus, UserPlus, Search as SearchIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useState, useEffect } from "react";
@@ -58,6 +58,48 @@ export function DetailsPanel({
     setIsEditingName(false);
   }, [conversation.id, conversation.name]);
 
+  const [showAddUser, setShowAddUser] = useState(false);
+  const [usersToSelect, setUsersToSelect] = useState<any[]>([]);
+  const [addSearchQuery, setAddSearchQuery] = useState("");
+  const [isSearchingUsers, setIsSearchingUsers] = useState(false);
+
+  useEffect(() => {
+    if (showAddUser) {
+      const fetchUsers = async () => {
+        setIsSearchingUsers(true);
+        try {
+          const res = await fetch(`/api/users?excludeId=${currentUser.id}&q=${addSearchQuery}`);
+          if (res.ok) {
+            const data = await res.json();
+            const currentIds = conversation.participants.map(p => p.id);
+            const available = data.filter((u: any) => !currentIds.includes(u.id));
+            setUsersToSelect(available);
+          }
+        } catch (error) {
+          console.error("Failed to fetch users", error);
+        } finally {
+          setIsSearchingUsers(false);
+        }
+      };
+      const debounce = setTimeout(fetchUsers, 300);
+      return () => clearTimeout(debounce);
+    }
+  }, [showAddUser, addSearchQuery, conversation.participants, currentUser.id]);
+
+  const handleAddUser = (targetUserId: string, targetUserName: string) => {
+    const socket = getSocket();
+    if (socket) {
+      socket.emit("add_user_to_group", {
+        chatId: conversation.id,
+        targetUserId,
+        targetUserName,
+        adminName: currentUser.name,
+      });
+      setShowAddUser(false);
+      setAddSearchQuery("");
+    }
+  };
+
   const parseGroupTheme = (convId: string) => {
     if (convId.startsWith("group_") && convId.includes("?")) {
       const params = new URLSearchParams(convId.split("?")[1]);
@@ -68,6 +110,31 @@ export function DetailsPanel({
   };
 
   const currentTheme = parseGroupTheme(conversation.id);
+  const [pendingTheme, setPendingTheme] = useState<string | null>(null);
+
+  const parseGroupAdmin = (convId: string) => {
+    if (convId.startsWith("group_") && convId.includes("?")) {
+      const params = new URLSearchParams(convId.split("?")[1]);
+      return params.get("admin");
+    }
+    return null;
+  };
+
+  const adminId = parseGroupAdmin(conversation.id);
+  const isAdmin = currentUser.id === adminId;
+
+  const handleRemoveUser = (targetUser: ChatUser) => {
+    if (!isAdmin) return;
+    const socket = getSocket();
+    if (socket) {
+      socket.emit("remove_user_from_group", {
+        chatId: conversation.id,
+        targetUserId: targetUser.id,
+        targetUserName: targetUser.name,
+        adminName: currentUser.name,
+      });
+    }
+  };
 
   useEffect(() => {
     const socket = getSocket();
@@ -96,6 +163,11 @@ export function DetailsPanel({
         userName: currentUser.name,
       });
     }
+    // Optimistically update the URL so the theme reflects immediately
+    const [baseId, queryPart] = conversation.id.split("?");
+    const params = new URLSearchParams(queryPart || "");
+    params.set("theme", newTheme);
+    router.push(`/chat/${baseId}?${params.toString()}`);
   };
 
   const handleSaveName = () => {
@@ -109,9 +181,11 @@ export function DetailsPanel({
         userName: currentUser.name,
       });
     }
-    const [baseId] = conversation.id.split("?");
-    const newChatId = `${baseId}?name=${encodeURIComponent(nameInput.trim())}`;
-    router.push(`/chat/${newChatId}`);
+    // Preserve all existing params (e.g. theme) when renaming
+    const [baseId, queryPart] = conversation.id.split("?");
+    const params = new URLSearchParams(queryPart || "");
+    params.set("name", nameInput.trim());
+    router.push(`/chat/${baseId}?${params.toString()}`);
     setIsEditingName(false);
   };
 
@@ -215,13 +289,19 @@ export function DetailsPanel({
               {THEMES.map((t) => (
                 <button
                   key={t.id}
-                  onClick={() => handleUpdateTheme(t.id)}
+                  onClick={() => {
+                    if (currentTheme !== t.id) {
+                      setPendingTheme(t.id);
+                    }
+                  }}
                   title={t.name}
                   className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
                     t.colorClass
                   } ${
                     currentTheme === t.id
                       ? "ring-2 ring-offset-2 ring-primary scale-110"
+                      : pendingTheme === t.id
+                      ? "ring-2 ring-offset-2 ring-muted-foreground scale-110"
                       : "hover:scale-110 opacity-70 hover:opacity-100"
                   }`}
                 >
@@ -231,15 +311,57 @@ export function DetailsPanel({
                 </button>
               ))}
             </div>
+            {pendingTheme && (
+              <div className="mt-4 p-3 bg-muted/50 rounded-lg border flex flex-col gap-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                <p className="text-xs text-center font-medium">Apply {THEMES.find(t => t.id === pendingTheme)?.name} theme?</p>
+                <div className="flex gap-2">
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    className="flex-1 h-7 text-xs" 
+                    onClick={() => setPendingTheme(null)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    className="flex-1 h-7 text-xs" 
+                    onClick={() => {
+                      handleUpdateTheme(pendingTheme);
+                      setPendingTheme(null);
+                    }}
+                  >
+                    Apply
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
         {/* Group members list if group */}
         {isGroup && (
           <div className="p-4 border-b">
-            <h4 className="text-xs font-semibold mb-3 text-muted-foreground uppercase tracking-wider">
-              Members ({conversation.participants.length})
-            </h4>
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Members ({conversation.participants.length})
+              </h4>
+              {isAdmin && (
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className={`h-6 w-6 rounded-full text-muted-foreground transition-colors ${showAddUser ? "bg-muted text-foreground" : "hover:bg-muted"}`} 
+                  title="Add User"
+                  onClick={() => {
+                    setShowAddUser(!showAddUser);
+                    setAddSearchQuery("");
+                  }}
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                </Button>
+              )}
+            </div>
+            
             <div className="flex flex-col gap-2">
               {conversation.participants.map((user) => (
                 <div
@@ -253,8 +375,13 @@ export function DetailsPanel({
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex flex-col min-w-0 flex-1">
-                    <span className="text-xs font-medium truncate">
+                    <span className="text-xs font-medium truncate flex items-center gap-1">
                       {user.name} {user.id === currentUser.id ? "(You)" : ""}
+                      {user.id === adminId && (
+                        <span title="Group Admin" className="flex items-center">
+                          <ShieldAlert className="w-3 h-3 text-primary ml-1" />
+                        </span>
+                      )}
                     </span>
                     {user.email && (
                       <span className="text-[10px] text-muted-foreground truncate">
@@ -262,9 +389,57 @@ export function DetailsPanel({
                       </span>
                     )}
                   </div>
+                  {isAdmin && user.id !== currentUser.id && (
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="text-muted-foreground hover:text-destructive shrink-0" 
+                      title="Remove User"
+                      onClick={() => handleRemoveUser(user)}
+                    >
+                      <UserMinus className="w-4 h-4" />
+                    </Button>
+                  )}
                 </div>
               ))}
             </div>
+
+            {showAddUser && (
+              <div className="mt-4 p-3 bg-muted/40 rounded-lg border flex flex-col gap-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="relative">
+                  <SearchIcon className="absolute left-2 top-2 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input 
+                    autoFocus
+                    placeholder="Search users to add..." 
+                    value={addSearchQuery}
+                    onChange={(e) => setAddSearchQuery(e.target.value)}
+                    className="pl-7 h-7 text-xs bg-background"
+                  />
+                </div>
+                <div className="flex flex-col gap-1 max-h-[120px] overflow-y-auto mt-1">
+                  {isSearchingUsers ? (
+                    <span className="text-[10px] text-muted-foreground text-center py-2">Searching...</span>
+                  ) : usersToSelect.length === 0 ? (
+                    <span className="text-[10px] text-muted-foreground text-center py-2">No users found.</span>
+                  ) : (
+                    usersToSelect.map(u => (
+                      <div key={u.id} className="flex items-center justify-between p-1.5 rounded-md hover:bg-muted transition-colors group cursor-pointer" onClick={() => handleAddUser(u.id, u.name)}>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Avatar className="h-5 w-5">
+                            <AvatarImage src={u.image || ""} alt={u.name} />
+                            <AvatarFallback className="text-[8px]">{u.name.substring(0,2).toUpperCase()}</AvatarFallback>
+                          </Avatar>
+                          <span className="text-xs font-medium truncate">{u.name}</span>
+                        </div>
+                        <Button size="icon" variant="ghost" className="h-5 w-5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+                          <UserPlus className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
