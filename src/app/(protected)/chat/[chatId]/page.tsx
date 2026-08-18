@@ -3,13 +3,19 @@
 import { useState, useEffect } from "react";
 import { ChatArea } from "@/components/chat/chat-area";
 import { DetailsPanel } from "@/components/chat/details-panel";
-import { useParams, notFound } from "next/navigation";
+import { useParams, useSearchParams, notFound } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { ChatUser } from "@/types/chat";
 
 export default function ChatDetailPage() {
   const params = useParams();
-  const chatId = params.chatId as string;
+  const searchParams = useSearchParams();
+  
+  // Reconstruct full chatId with query parameters because the backend expects it
+  const baseChatId = params.chatId as string;
+  const queryString = searchParams.toString();
+  const chatId = queryString ? `${baseChatId}?${queryString}` : baseChatId;
+  
   const [showDetails, setShowDetails] = useState(false);
   const { data: session } = authClient.useSession();
   const currentUser = session?.user;

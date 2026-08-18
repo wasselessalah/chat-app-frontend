@@ -68,6 +68,7 @@ export function DetailsPanel({
   };
 
   const currentTheme = parseGroupTheme(conversation.id);
+  const [pendingTheme, setPendingTheme] = useState<string | null>(null);
 
   useEffect(() => {
     const socket = getSocket();
@@ -96,6 +97,11 @@ export function DetailsPanel({
         userName: currentUser.name,
       });
     }
+    // Optimistically update the URL so the theme reflects immediately
+    const [baseId, queryPart] = conversation.id.split("?");
+    const params = new URLSearchParams(queryPart || "");
+    params.set("theme", newTheme);
+    router.push(`/chat/${baseId}?${params.toString()}`);
   };
 
   const handleSaveName = () => {
@@ -109,9 +115,11 @@ export function DetailsPanel({
         userName: currentUser.name,
       });
     }
-    const [baseId] = conversation.id.split("?");
-    const newChatId = `${baseId}?name=${encodeURIComponent(nameInput.trim())}`;
-    router.push(`/chat/${newChatId}`);
+    // Preserve all existing params (e.g. theme) when renaming
+    const [baseId, queryPart] = conversation.id.split("?");
+    const params = new URLSearchParams(queryPart || "");
+    params.set("name", nameInput.trim());
+    router.push(`/chat/${baseId}?${params.toString()}`);
     setIsEditingName(false);
   };
 
@@ -215,13 +223,19 @@ export function DetailsPanel({
               {THEMES.map((t) => (
                 <button
                   key={t.id}
-                  onClick={() => handleUpdateTheme(t.id)}
+                  onClick={() => {
+                    if (currentTheme !== t.id) {
+                      setPendingTheme(t.id);
+                    }
+                  }}
                   title={t.name}
                   className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
                     t.colorClass
                   } ${
                     currentTheme === t.id
                       ? "ring-2 ring-offset-2 ring-primary scale-110"
+                      : pendingTheme === t.id
+                      ? "ring-2 ring-offset-2 ring-muted-foreground scale-110"
                       : "hover:scale-110 opacity-70 hover:opacity-100"
                   }`}
                 >
@@ -231,6 +245,31 @@ export function DetailsPanel({
                 </button>
               ))}
             </div>
+            {pendingTheme && (
+              <div className="mt-4 p-3 bg-muted/50 rounded-lg border flex flex-col gap-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                <p className="text-xs text-center font-medium">Apply {THEMES.find(t => t.id === pendingTheme)?.name} theme?</p>
+                <div className="flex gap-2">
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    className="flex-1 h-7 text-xs" 
+                    onClick={() => setPendingTheme(null)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    className="flex-1 h-7 text-xs" 
+                    onClick={() => {
+                      handleUpdateTheme(pendingTheme);
+                      setPendingTheme(null);
+                    }}
+                  >
+                    Apply
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

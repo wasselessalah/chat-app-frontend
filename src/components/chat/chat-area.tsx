@@ -224,7 +224,7 @@ export function ChatArea({
     const fetchMessages = async () => {
       try {
         const res = await fetch(
-          `${BACKEND_URL}/api/messages?chatId=${conversation.id}&userId=${currentUser.id}&limit=15`
+          `${BACKEND_URL}/api/messages?chatId=${encodeURIComponent(conversation.id)}&userId=${currentUser.id}&limit=15`
         );
         if (res.ok) {
           const data = await res.json();
@@ -414,9 +414,7 @@ export function ChatArea({
 
     try {
       const res = await fetch(
-        `${BACKEND_URL}/api/messages?chatId=${
-          conversation.id
-        }&userId=${currentUser.id}&limit=15&before=${encodeURIComponent(nextCursor)}`
+        `${BACKEND_URL}/api/messages?chatId=${encodeURIComponent(conversation.id)}&userId=${currentUser.id}&limit=15&before=${encodeURIComponent(nextCursor)}`
       );
       if (res.ok) {
         const data = await res.json();
@@ -571,10 +569,11 @@ export function ChatArea({
                           userName: currentUser.name,
                         });
                       }
-                      const [baseId] = conversation.id.split("?");
-                      const newChatId = `${baseId}?name=${encodeURIComponent(cleanName)}`;
+                      const [baseId, queryPart] = conversation.id.split("?");
+                      const urlParams = new URLSearchParams(queryPart || "");
+                      urlParams.set("name", cleanName);
                       setGroupNameInput(cleanName);
-                      router.push(`/chat/${newChatId}`);
+                      router.push(`/chat/${baseId}?${urlParams.toString()}`);
                       setIsEditingGroupName(false);
                     }
                     if (e.key === "Escape") setIsEditingGroupName(false);
@@ -596,10 +595,11 @@ export function ChatArea({
                         userName: currentUser.name,
                       });
                     }
-                    const [baseId] = conversation.id.split("?");
-                    const newChatId = `${baseId}?name=${encodeURIComponent(cleanName)}`;
+                    const [baseId, queryPart] = conversation.id.split("?");
+                    const urlParams = new URLSearchParams(queryPart || "");
+                    urlParams.set("name", cleanName);
                     setGroupNameInput(cleanName);
-                    router.push(`/chat/${newChatId}`);
+                    router.push(`/chat/${baseId}?${urlParams.toString()}`);
                     setIsEditingGroupName(false);
                   }}
                 >
