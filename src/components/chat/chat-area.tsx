@@ -9,6 +9,7 @@ import {
   Info,
   MoreVertical,
   Phone,
+  Search,
   Send,
   Video,
   Check,
@@ -116,6 +117,10 @@ export function ChatArea({
   const [activePickerId, setActivePickerId] = useState<string | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeSearch, setActiveSearch] = useState("");
+
   const [isEditingGroupName, setIsEditingGroupName] = useState(false);
 
   const parseGroupName = (convId: string, convName?: string | null) => {
@@ -213,18 +218,14 @@ export function ChatArea({
     }
   }, [messages]);
 
-  // Handle Socket.IO connections and initial historical messages (15 per page)
+  // Fetch messages (Initial & on Search)
   useEffect(() => {
-    const socket = getSocket();
-    if (!socket) return;
-
     isInitialLoadRef.current = true;
-
-    // Fetch initial 15 messages from the backend
     const fetchMessages = async () => {
       try {
+        const searchParam = activeSearch ? `&search=${encodeURIComponent(activeSearch)}` : "";
         const res = await fetch(
-          `${BACKEND_URL}/api/messages?chatId=${encodeURIComponent(conversation.id)}&userId=${currentUser.id}&limit=15`
+          `${BACKEND_URL}/api/messages?chatId=${encodeURIComponent(conversation.id)}&userId=${currentUser.id}&limit=15${searchParam}`
         );
         if (res.ok) {
           const data = await res.json();
@@ -251,18 +252,29 @@ export function ChatArea({
             }
           }, 50);
 
-          // Once loaded, mark them as read
-          socket.emit("mark_messages_read", {
-            chatId: conversation.id,
-            readerId: currentUser.id,
-          });
+          // Once loaded, mark them as read if not searching
+          if (!activeSearch) {
+            const socket = getSocket();
+            if (socket) {
+              socket.emit("mark_messages_read", {
+                chatId: conversation.id,
+                readerId: currentUser.id,
+              });
+            }
+          }
         }
       } catch (error) {
         console.error("Error fetching messages:", error);
       }
     };
-
     fetchMessages();
+  }, [conversation.id, currentUser.id, BACKEND_URL, activeSearch]);
+
+  // Handle Socket.IO connections
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+
     socket.emit("join_chat", conversation.id);
 
     const handleReceiveMessage = (newMessage: any) => {
@@ -413,8 +425,9 @@ export function ChatArea({
     const previousScrollHeight = scrollContainer ? scrollContainer.scrollHeight : 0;
 
     try {
+      const searchParam = activeSearch ? `&search=${encodeURIComponent(activeSearch)}` : "";
       const res = await fetch(
-        `${BACKEND_URL}/api/messages?chatId=${encodeURIComponent(conversation.id)}&userId=${currentUser.id}&limit=15&before=${encodeURIComponent(nextCursor)}`
+        `${BACKEND_URL}/api/messages?chatId=${encodeURIComponent(conversation.id)}&userId=${currentUser.id}&limit=15&before=${encodeURIComponent(nextCursor)}${searchParam}`
       );
       if (res.ok) {
         const data = await res.json();
@@ -661,6 +674,23 @@ export function ChatArea({
           <Button
             variant="ghost"
             size="icon"
+            className={`text-muted-foreground ${showSearch ? "bg-muted text-foreground" : ""}`}
+            onClick={() => {
+              if (showSearch) {
+                setShowSearch(false);
+                setSearchQuery("");
+                setActiveSearch("");
+              } else {
+                setShowSearch(true);
+              }
+            }}
+            title="Search Messages"
+          >
+            <Search className="h-5 w-5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
             className="text-muted-foreground"
             onClick={onToggleDetails}
           >
@@ -675,6 +705,36 @@ export function ChatArea({
           </Button>
         </div>
       </div>
+
+      {/* Search Bar */}
+      {showSearch && (
+        <div className="bg-muted/40 p-3 border-b flex items-center gap-2 shrink-0 animate-in fade-in slide-in-from-top-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              autoFocus
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") setActiveSearch(searchQuery.trim());
+                if (e.key === "Escape") {
+                  setShowSearch(false);
+                  setSearchQuery("");
+                  setActiveSearch("");
+                }
+              }}
+              placeholder="Search messages in this chat... (Press Enter)"
+              className="pl-8 bg-background h-9 text-sm"
+            />
+          </div>
+          <Button
+            size="sm"
+            onClick={() => setActiveSearch(searchQuery.trim())}
+          >
+            Search
+          </Button>
+        </div>
+      )}
 
       {/* Messages */}
       <ScrollArea className="flex-1 min-h-0 p-6" ref={scrollRef}>
