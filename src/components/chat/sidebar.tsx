@@ -98,7 +98,13 @@ function parseGroupFromId(
   const [idPart, queryPart] = chatId.split("?");
   const urlParams = new URLSearchParams(queryPart || "");
   const customName = urlParams.get("name");
-  const memberIds = idPart.replace("group_", "").split("_vs_");
+  const memberIdsFromPath = idPart.replace("group_", "").split("_vs_");
+
+  const adds = urlParams.has("add") ? urlParams.get("add")!.split(",") : [];
+  const rms = urlParams.has("rm") ? urlParams.get("rm")!.split(",") : [];
+  const currentMemberIds = new Set([...memberIdsFromPath, ...adds]);
+  rms.forEach(r => currentMemberIds.delete(r));
+  const memberIds = Array.from(currentMemberIds).filter(Boolean);
 
   const membersMap = new Map<string, AppUser>();
   if (currentUser) {
@@ -165,10 +171,12 @@ export function Sidebar() {
       router.push(`/chat/${chatId}`);
     } else {
       const sortedUsers = [currentUser.id, ...selectedUserIds].sort();
-      const groupNameQuery = groupNameInput.trim()
-        ? `?name=${encodeURIComponent(groupNameInput.trim())}`
-        : "";
-      const chatId = `group_${sortedUsers.join("_vs_")}${groupNameQuery}`;
+      const params = new URLSearchParams();
+      if (groupNameInput.trim()) {
+        params.set("name", groupNameInput.trim());
+      }
+      params.set("admin", currentUser.id);
+      const chatId = `group_${sortedUsers.join("_vs_")}?${params.toString()}`;
 
       const selectedUsers = users.filter((u) => selectedUserIds.includes(u.id));
       const newGroup: GroupConversation = {
@@ -433,17 +441,49 @@ export function Sidebar() {
       }
     };
 
+    const handleGroupUserRemoved = handleUserLeftGroup;
+
+    const handleGroupUserAdded = ({ chatId, newChatId, targetUserId, targetUserName }: any) => {
+      if (targetUserId === currentUser.id) {
+        fetchGroups();
+      } else {
+        setGroups((prevGroups) =>
+          prevGroups.map((g) => {
+            if (g.chatId.split("?")[0] === chatId.split("?")[0]) {
+              const newMember = users.find(u => u.id === targetUserId) || {
+                id: targetUserId,
+                name: targetUserName,
+                email: "",
+                image: null,
+              };
+              return {
+                ...g,
+                chatId: newChatId,
+                memberIds: [...g.memberIds, targetUserId].sort(),
+                members: [...g.members, newMember],
+              };
+            }
+            return g;
+          })
+        );
+      }
+    };
+
     socket.on("receive_message", handleReceiveMessage);
     socket.on("group_renamed", handleGroupRenamed);
     socket.on("group_created", handleGroupCreated);
     socket.on("user_left_group", handleUserLeftGroup);
+    socket.on("group_user_removed", handleGroupUserRemoved);
+    socket.on("group_user_added", handleGroupUserAdded);
     return () => {
       socket.off("receive_message", handleReceiveMessage);
       socket.off("group_renamed", handleGroupRenamed);
       socket.off("group_created", handleGroupCreated);
       socket.off("user_left_group", handleUserLeftGroup);
+      socket.off("group_user_removed", handleGroupUserRemoved);
+      socket.off("group_user_added", handleGroupUserAdded);
     };
-  }, [selectedId, currentUser]);
+  }, [selectedId, currentUser, users, fetchGroups]);
 
   // Clear unread count when opening a chat
   useEffect(() => {

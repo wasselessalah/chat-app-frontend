@@ -398,6 +398,26 @@ export function ChatArea({
       }
     };
 
+    const handleGroupUserRemoved = ({ chatId, newChatId, targetUserId }: any) => {
+      const cleanTarget = chatId ? chatId.split("?")[0] : "";
+      const cleanCurrent = conversation.id.split("?")[0];
+      if (cleanTarget === cleanCurrent) {
+        if (targetUserId === currentUser.id) {
+          router.push("/chat");
+        } else if (newChatId) {
+          router.replace(`/chat/${newChatId}`);
+        }
+      }
+    };
+
+    const handleGroupUserAdded = ({ chatId, newChatId }: any) => {
+      const cleanTarget = chatId ? chatId.split("?")[0] : "";
+      const cleanCurrent = conversation.id.split("?")[0];
+      if (cleanTarget === cleanCurrent && newChatId) {
+        router.replace(`/chat/${newChatId}`);
+      }
+    };
+
     socket.on("receive_message", handleReceiveMessage);
     socket.on("messages_read", handleMessagesRead);
     socket.on("message_updated", handleMessageUpdated);
@@ -405,6 +425,8 @@ export function ChatArea({
     socket.on("message_reacted", handleMessageReacted);
     socket.on("group_renamed", handleGroupRenamed);
     socket.on("user_left_group", handleUserLeftGroup);
+    socket.on("group_user_removed", handleGroupUserRemoved);
+    socket.on("group_user_added", handleGroupUserAdded);
 
     return () => {
       socket.off("receive_message", handleReceiveMessage);
@@ -414,6 +436,8 @@ export function ChatArea({
       socket.off("message_reacted", handleMessageReacted);
       socket.off("group_renamed", handleGroupRenamed);
       socket.off("user_left_group", handleUserLeftGroup);
+      socket.off("group_user_removed", handleGroupUserRemoved);
+      socket.off("group_user_added", handleGroupUserAdded);
     };
   }, [conversation.id, currentUser.id, BACKEND_URL]);
 
