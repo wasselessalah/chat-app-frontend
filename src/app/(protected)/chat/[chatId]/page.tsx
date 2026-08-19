@@ -7,6 +7,8 @@ import { useParams, useSearchParams, notFound } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { ChatUser } from "@/types/chat";
 
+import { getParticipantIds } from "@/constants/group.constants";
+
 export default function ChatDetailPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -30,21 +32,21 @@ export default function ChatDetailPage() {
     if (!currentUser || !chatId) return;
 
     if (isGroup) {
-      // Group Chat ID format: group_id1_vs_id2_vs_id3?name=CustomName
+      // Group Chat ID format: group_id1_vs_id2_vs_id3?name=CustomName&add=id4&rm=id1
       const [idPart, queryPart] = chatId.split("?");
       const urlParams = new URLSearchParams(queryPart || "");
       const explicitName = urlParams.get("name");
 
-      const rawIds = idPart.replace("group_", "").split("_vs_");
+      // Use getParticipantIds to correctly handle ?add= and ?rm= params
+      const memberIds = getParticipantIds(chatId);
+      const otherUserIds = memberIds.filter((id) => id !== currentUser.id);
 
-      // Authorization Check: Only members can view this group
-      if (!rawIds.includes(currentUser.id)) {
+      // Authorization Check: Only members (including dynamically added ones) can view
+      if (!memberIds.includes(currentUser.id)) {
         setParticipants([]);
         setLoading(false);
         return;
       }
-
-      const otherUserIds = rawIds.filter((id) => id !== currentUser.id);
 
       Promise.all(
         otherUserIds.map((id) =>

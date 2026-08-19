@@ -2,7 +2,8 @@
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChatUser, Conversation } from "@/types/chat";
+import { ChatUser, Conversation } from "@/types/chat.types";
+import { parseGroupName, parseGroupTheme, parseGroupAdmin } from "@/constants/group.constants";
 import { Bell, FileText, Image as ImageIcon, Link2, X, Users, Pencil, Check, LogOut, Palette, ShieldAlert, UserMinus, UserPlus, Search as SearchIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,16 +37,6 @@ export function DetailsPanel({
     (p) => p.id !== currentUser.id
   );
   const otherUser = otherUsers[0];
-
-  const parseGroupName = (convId: string, convName?: string | null) => {
-    if (convName) return convName;
-    if (convId.startsWith("group_") && convId.includes("?")) {
-      const params = new URLSearchParams(convId.split("?")[1]);
-      const nameParam = params.get("name");
-      if (nameParam) return nameParam;
-    }
-    return "";
-  };
 
   const defaultGroupName = parseGroupName(conversation.id, conversation.name) || "Group Chat";
 
@@ -100,25 +91,8 @@ export function DetailsPanel({
     }
   };
 
-  const parseGroupTheme = (convId: string) => {
-    if (convId.startsWith("group_") && convId.includes("?")) {
-      const params = new URLSearchParams(convId.split("?")[1]);
-      const themeParam = params.get("theme");
-      if (themeParam) return themeParam;
-    }
-    return "default";
-  };
-
   const currentTheme = parseGroupTheme(conversation.id);
   const [pendingTheme, setPendingTheme] = useState<string | null>(null);
-
-  const parseGroupAdmin = (convId: string) => {
-    if (convId.startsWith("group_") && convId.includes("?")) {
-      const params = new URLSearchParams(convId.split("?")[1]);
-      return params.get("admin");
-    }
-    return null;
-  };
 
   const adminId = parseGroupAdmin(conversation.id);
   const isAdmin = currentUser.id === adminId;
@@ -139,18 +113,22 @@ export function DetailsPanel({
   useEffect(() => {
     const socket = getSocket();
     if (!socket) return;
-    const handleGroupRenamed = ({ chatId, newName }: any) => {
+    const handleGroupRenamed = ({ chatId, newChatId, newName }: any) => {
       const cleanTarget = chatId ? chatId.split("?")[0] : "";
       const cleanCurrent = conversation.id.split("?")[0];
       if (cleanTarget === cleanCurrent) {
-        if (newName) setNameInput(newName);
+        if (newName !== undefined) setNameInput(newName);
+        // Navigate to the updated chatId that the server authorised
+        if (newChatId && newChatId !== conversation.id) {
+          router.replace(`/chat/${newChatId}`);
+        }
       }
     };
     socket.on("group_renamed", handleGroupRenamed);
     return () => {
       socket.off("group_renamed", handleGroupRenamed);
     };
-  }, [conversation.id]);
+  }, [conversation.id, router]);
 
   const handleUpdateTheme = (newTheme: string) => {
     if (newTheme === currentTheme) return;
