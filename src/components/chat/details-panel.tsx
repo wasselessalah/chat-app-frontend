@@ -139,18 +139,22 @@ export function DetailsPanel({
   useEffect(() => {
     const socket = getSocket();
     if (!socket) return;
-    const handleGroupRenamed = ({ chatId, newName }: any) => {
+    const handleGroupRenamed = ({ chatId, newChatId, newName, newTheme }: any) => {
       const cleanTarget = chatId ? chatId.split("?")[0] : "";
       const cleanCurrent = conversation.id.split("?")[0];
       if (cleanTarget === cleanCurrent) {
-        if (newName) setNameInput(newName);
+        if (newName !== undefined) setNameInput(newName);
+        // Navigate to the updated chatId that the server authorised
+        if (newChatId && newChatId !== conversation.id) {
+          router.replace(`/chat/${newChatId}`);
+        }
       }
     };
     socket.on("group_renamed", handleGroupRenamed);
     return () => {
       socket.off("group_renamed", handleGroupRenamed);
     };
-  }, [conversation.id]);
+  }, [conversation.id, router]);
 
   const handleUpdateTheme = (newTheme: string) => {
     if (newTheme === currentTheme) return;

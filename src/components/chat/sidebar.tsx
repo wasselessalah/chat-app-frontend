@@ -389,17 +389,17 @@ export function Sidebar() {
       }
     };
 
-    const handleGroupRenamed = ({ chatId, newName }: any) => {
+    const handleGroupRenamed = ({ chatId, newChatId, newName, newTheme }: any) => {
       setGroups((prevGroups) =>
         prevGroups.map((g) => {
-          const cleanTarget = chatId.split("?")[0];
+          const cleanTarget = chatId ? chatId.split("?")[0] : "";
           const cleanCurrent = g.chatId.split("?")[0];
           if (cleanTarget === cleanCurrent) {
-            const [baseId] = g.chatId.split("?");
+            // Use the authoritative newChatId from the server which has all params
             return {
               ...g,
-              chatId: `${baseId}?name=${encodeURIComponent(newName)}`,
-              name: newName,
+              chatId: newChatId || g.chatId,
+              name: newName !== undefined ? newName : g.name,
             };
           }
           return g;
@@ -421,16 +421,18 @@ export function Sidebar() {
 
     const handleUserLeftGroup = ({ chatId, newChatId, userId }: any) => {
       if (userId === currentUser.id) {
+        // We left — remove from our groups list
         setGroups((prevGroups) =>
           prevGroups.filter((g) => g.chatId.split("?")[0] !== chatId.split("?")[0])
         );
       } else {
+        // Someone else left — update the chatId and member list
         setGroups((prevGroups) =>
           prevGroups.map((g) => {
             if (g.chatId.split("?")[0] === chatId.split("?")[0]) {
               return {
                 ...g,
-                chatId: newChatId,
+                chatId: newChatId || g.chatId,
                 memberIds: g.memberIds.filter((id) => id !== userId),
                 members: g.members.filter((m) => m.id !== userId),
               };
@@ -441,7 +443,29 @@ export function Sidebar() {
       }
     };
 
-    const handleGroupUserRemoved = handleUserLeftGroup;
+    const handleGroupUserRemoved = ({ chatId, newChatId, targetUserId }: any) => {
+      if (targetUserId === currentUser.id) {
+        // We were removed — remove from our groups list
+        setGroups((prevGroups) =>
+          prevGroups.filter((g) => g.chatId.split("?")[0] !== chatId.split("?")[0])
+        );
+      } else {
+        // Someone else was removed — update the chatId and member list
+        setGroups((prevGroups) =>
+          prevGroups.map((g) => {
+            if (g.chatId.split("?")[0] === chatId.split("?")[0]) {
+              return {
+                ...g,
+                chatId: newChatId || g.chatId,
+                memberIds: g.memberIds.filter((id) => id !== targetUserId),
+                members: g.members.filter((m) => m.id !== targetUserId),
+              };
+            }
+            return g;
+          })
+        );
+      }
+    };
 
     const handleGroupUserAdded = ({ chatId, newChatId, targetUserId, targetUserName }: any) => {
       if (targetUserId === currentUser.id) {

@@ -205,7 +205,7 @@ export function ChatArea({
   const otherUsers = conversation.participants.filter(
     (p) => p.id !== currentUser.id
   );
-  const otherUser = otherUsers[0];
+  const otherUser = otherUsers[0]; // for 1-on-1 chats
 
   const onlineUserIds = useOnlineUsers();
   const isOnline = otherUser ? onlineUserIds.has(otherUser.id) : false;
@@ -278,7 +278,10 @@ export function ChatArea({
     socket.emit("join_chat", conversation.id);
 
     const handleReceiveMessage = (newMessage: any) => {
-      if (newMessage.chatId === conversation.id) {
+      // Match by base chatId so messages still arrive after rename/add/remove
+      const newMsgBase = newMessage.chatId ? newMessage.chatId.split("?")[0] : "";
+      const convBase = conversation.id.split("?")[0];
+      if (newMsgBase === convBase) {
         setMessages((prev) => [
           ...prev,
           {
@@ -317,7 +320,9 @@ export function ChatArea({
     };
 
     const handleMessageUpdated = (updatedMsg: any) => {
-      if (updatedMsg.chatId === conversation.id) {
+      const updatedBase = updatedMsg.chatId ? updatedMsg.chatId.split("?")[0] : "";
+      const convBase = conversation.id.split("?")[0];
+      if (updatedBase === convBase) {
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === updatedMsg.id
@@ -333,7 +338,9 @@ export function ChatArea({
     };
 
     const handleMessageDeleted = (deletedMsg: any) => {
-      if (deletedMsg.chatId === conversation.id) {
+      const deletedBase = deletedMsg.chatId ? deletedMsg.chatId.split("?")[0] : "";
+      const convBase = conversation.id.split("?")[0];
+      if (deletedBase === convBase) {
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === deletedMsg.id
@@ -353,7 +360,9 @@ export function ChatArea({
       chatId: string;
       reactions: any[];
     }) => {
-      if (data.chatId === conversation.id) {
+      const reactBase = data.chatId ? data.chatId.split("?")[0] : "";
+      const convBase = conversation.id.split("?")[0];
+      if (reactBase === convBase) {
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === data.id
@@ -489,7 +498,8 @@ export function ChatArea({
   const getDisplayName = (user: ChatUser) => user.name || "Unknown";
   const getAvatar = (user: ChatUser) => user.image || user.avatar || "";
 
-  if (!otherUser) return null;
+  // In group chats otherUser may be undefined if you're alone — guard here
+  if (!otherUser && !isGroup) return null;
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
@@ -816,12 +826,19 @@ export function ChatArea({
             const isMe = msg.senderId === currentUser.id;
             const isDeleted =
               msg.isDeleted || msg.content === "This message was deleted";
+
+            // In group chats, find the actual sender from participants
+            const senderParticipant = conversation.participants.find(
+              (p) => p.id === msg.senderId
+            );
             const senderAvatar = isMe
               ? getAvatar(currentUser)
-              : getAvatar(otherUser);
+              : senderParticipant
+              ? getAvatar(senderParticipant)
+              : "";
             const senderName = isMe
               ? getDisplayName(currentUser)
-              : getDisplayName(otherUser);
+              : msg.senderName || (senderParticipant ? getDisplayName(senderParticipant) : "Member");
             const showAvatar =
               idx === 0 || messages[idx - 1].senderId !== msg.senderId;
 
