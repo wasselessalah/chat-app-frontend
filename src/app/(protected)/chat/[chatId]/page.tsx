@@ -7,20 +7,7 @@ import { useParams, useSearchParams, notFound } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { ChatUser } from "@/types/chat";
 
-// Resolve effective member list from a group chatId, respecting ?add= and ?rm= params
-function getParticipantIds(chatId: string): string[] {
-  if (!chatId) return [];
-  const [cleanId, queryPart] = chatId.split("?");
-  const withoutPrefix = cleanId.replace(/^group_/, "");
-  const baseMembers = withoutPrefix.split("_vs_").filter(Boolean);
-  if (!queryPart) return baseMembers;
-  const params = new URLSearchParams(queryPart);
-  const adds = params.has("add") ? params.get("add")!.split(",") : [];
-  const rms = params.has("rm") ? params.get("rm")!.split(",") : [];
-  const current = new Set([...baseMembers, ...adds]);
-  rms.forEach((r) => current.delete(r));
-  return Array.from(current);
-}
+import { getParticipantIds } from "@/constants/group.constants";
 
 export default function ChatDetailPage() {
   const params = useParams();
