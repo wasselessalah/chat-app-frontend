@@ -35,6 +35,7 @@ export type Message = {
 
 export type Conversation = {
   id: string;
+  chatId?: string;
   participants: ChatUser[];
   lastMessage?: Partial<Message> | null;
   unreadCount?: number;

@@ -8,7 +8,7 @@ interface UseMessageSocketProps {
   currentUserId: string;
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
   setGroupNameInput?: (name: string) => void;
-  scrollRef: React.RefObject<HTMLDivElement>;
+  scrollRef: React.RefObject<HTMLDivElement | null>;
 }
 
 export function useMessageSocket({
