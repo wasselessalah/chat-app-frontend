@@ -3,6 +3,7 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChatUser, Conversation } from "@/types/chat.types";
 import { Edit, Loader2, Search, Settings, Check, X, Users } from "lucide-react";
 import { useState } from "react";
@@ -10,6 +11,7 @@ import { useRouter, useParams } from "next/navigation";
 import { useOnlineUsers } from "@/hooks/useOnlineUsers";
 import { parseGroupName } from "@/constants/group.constants";
 import { useSidebar } from "@/features/chat/hooks/useSidebar";
+import { NewChatModal } from "@/features/chat/components/NewChatModal";
 
 interface SidebarProps {
   currentUser: ChatUser;
@@ -24,7 +26,8 @@ export function Sidebar({ currentUser }: SidebarProps) {
   const { users, groups, loading, unreadCounts } = useSidebar(currentUser);
   const onlineUserIds = useOnlineUsers(currentUser.id);
 
-  const formatMessageTime = (date: Date | string) => {
+  const formatMessageTime = (date?: Date | string) => {
+    if (!date) return "";
     const d = new Date(date);
     const today = new Date();
     const isToday = d.toDateString() === today.toDateString();
@@ -72,9 +75,7 @@ export function Sidebar({ currentUser }: SidebarProps) {
             Chats
           </h1>
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
-              <Edit className="h-4 w-4" />
-            </Button>
+            <NewChatModal currentUser={currentUser} />
             <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
               <Settings className="h-4 w-4" />
             </Button>

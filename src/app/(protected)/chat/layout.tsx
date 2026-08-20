@@ -14,10 +14,16 @@ export default async function ChatLayout({ children }: { children: React.ReactNo
   }
 
   return (
+
     <div className="flex flex-col h-screen h-[100dvh] w-full overflow-hidden bg-background">
       <Navbar />
       <div className="flex-1 flex min-h-0 w-full overflow-hidden">
-        <Sidebar />
+        <Sidebar currentUser={{
+          id: session.user.id,
+          name: session.user.name,
+          email: session.user.email,
+          image: session.user.image ?? undefined,
+        }} />
         <main className="flex-1 flex min-h-0 min-w-0 overflow-hidden">
           {children}
         </main>

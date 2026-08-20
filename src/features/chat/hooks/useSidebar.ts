@@ -53,7 +53,7 @@ export function useSidebar(currentUser: ChatUser) {
     });
 
     groups.forEach((g) => {
-      socket.emit("join_chat", g.chatId);
+      if (g.chatId) socket.emit("join_chat", g.chatId);
     });
 
     const handleReceiveMessage = (newMessage: Message) => {
@@ -90,7 +90,7 @@ export function useSidebar(currentUser: ChatUser) {
       } else {
         setGroups((prevGroups) => {
           let updatedGroups = prevGroups.map((g) => {
-            const gBase = g.id || g.chatId.split("?")[0];
+            const gBase = g.chatId ? g.chatId.split("?")[0] : g.id;
             if (gBase === baseChatId) {
               return { ...g, lastMessage: newMessage };
             }
@@ -141,7 +141,7 @@ export function useSidebar(currentUser: ChatUser) {
       setGroups((prevGroups) =>
         prevGroups.map((g) => {
           const cleanTarget = chatId ? chatId.split("?")[0] : "";
-          const cleanCurrent = g.chatId.split("?")[0];
+          const cleanCurrent = g.chatId ? g.chatId.split("?")[0] : g.id;
           if (cleanTarget === cleanCurrent) {
             return {
               ...g,
@@ -156,11 +156,11 @@ export function useSidebar(currentUser: ChatUser) {
 
     const handleUserLeftGroup = ({ chatId, newChatId, userId }: any) => {
       if (userId === currentUser.id) {
-        setGroups((prevGroups) => prevGroups.filter((g) => g.chatId.split("?")[0] !== chatId.split("?")[0]));
+        setGroups((prevGroups) => prevGroups.filter((g) => (g.chatId ? g.chatId.split("?")[0] : g.id) !== chatId.split("?")[0]));
       } else {
         setGroups((prevGroups) =>
           prevGroups.map((g) => {
-            if (g.chatId.split("?")[0] === chatId.split("?")[0]) {
+            if ((g.chatId ? g.chatId.split("?")[0] : g.id) === chatId.split("?")[0]) {
               return {
                 ...g,
                 chatId: newChatId || g.chatId,
@@ -175,11 +175,11 @@ export function useSidebar(currentUser: ChatUser) {
 
     const handleGroupUserRemoved = ({ chatId, newChatId, targetUserId }: any) => {
       if (targetUserId === currentUser.id) {
-        setGroups((prevGroups) => prevGroups.filter((g) => g.chatId.split("?")[0] !== chatId.split("?")[0]));
+        setGroups((prevGroups) => prevGroups.filter((g) => (g.chatId ? g.chatId.split("?")[0] : g.id) !== chatId.split("?")[0]));
       } else {
         setGroups((prevGroups) =>
           prevGroups.map((g) => {
-            if (g.chatId.split("?")[0] === chatId.split("?")[0]) {
+            if ((g.chatId ? g.chatId.split("?")[0] : g.id) === chatId.split("?")[0]) {
               return {
                 ...g,
                 chatId: newChatId || g.chatId,
@@ -196,7 +196,7 @@ export function useSidebar(currentUser: ChatUser) {
       setGroups((prevGroups) => {
         let updated = false;
         const mapped = prevGroups.map((g) => {
-          if (g.chatId.split("?")[0] === chatId.split("?")[0]) {
+          if ((g.chatId ? g.chatId.split("?")[0] : g.id) === chatId.split("?")[0]) {
             updated = true;
             return { ...g, chatId: newChatId || g.chatId };
           }
@@ -213,12 +213,19 @@ export function useSidebar(currentUser: ChatUser) {
       });
     };
 
+    const handleGroupCreated = () => {
+      messageService.getUserGroups(currentUser.id).then((gs: any) => {
+        setGroups(gs);
+      });
+    };
+
     socket.on("receive_message", handleReceiveMessage);
     socket.on("messages_read", handleMessagesRead);
     socket.on("group_renamed", handleGroupRenamed);
     socket.on("user_left_group", handleUserLeftGroup);
     socket.on("group_user_removed", handleGroupUserRemoved);
     socket.on("group_user_added", handleGroupUserAdded);
+    socket.on("group_created", handleGroupCreated);
 
     return () => {
       socket.off("receive_message", handleReceiveMessage);
@@ -227,6 +234,7 @@ export function useSidebar(currentUser: ChatUser) {
       socket.off("user_left_group", handleUserLeftGroup);
       socket.off("group_user_removed", handleGroupUserRemoved);
       socket.off("group_user_added", handleGroupUserAdded);
+      socket.off("group_created", handleGroupCreated);
     };
   }, [loading, currentUser.id, users, groups]);
 
