@@ -11,7 +11,7 @@ export default function Home() {
         <div className="absolute -bottom-[20%] left-[10%] h-[600px] w-[600px] rounded-full bg-indigo-500/20 mix-blend-multiply blur-[120px] dark:bg-indigo-600/20" />
       </div>
 
-      <Navbar className="relative z-10 w-full backdrop-blur-md bg-white/70 dark:bg-[#09090b]/70 border-b border-zinc-200/50 dark:border-zinc-800/50 sticky top-0" />
+      <Navbar />
       
       <main className="relative z-10 flex-1 w-full flex flex-col items-center justify-center pt-24 pb-16 px-4 md:px-6">
         
