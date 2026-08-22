@@ -3,7 +3,7 @@ import { Navbar } from "@/components/navbar";
 
 export default function Home() {
   return (
-    <div className="relative flex min-h-screen flex-col items-center bg-zinc-50 dark:bg-[#09090b] text-zinc-950 dark:text-zinc-50 font-sans w-full overflow-hidden">
+    <div className="relative flex min-h-screen flex-col items-center bg-zinc-50 dark:bg-[#09090b] text-zinc-950 dark:text-zinc-50 font-sans w-full overflow-x-hidden">
       {/* Background Decorative Elements */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden flex justify-center">
         <div className="absolute -top-[20%] left-1/4 h-[500px] w-[500px] rounded-full bg-blue-500/20 mix-blend-multiply blur-[120px] dark:bg-blue-600/20" />
@@ -13,7 +13,7 @@ export default function Home() {
 
       <Navbar />
       
-      <main className="relative z-10 flex-1 w-full flex flex-col items-center justify-center pt-24 pb-16 px-4 md:px-6">
+      <main className="relative z-10 flex-1 w-full flex flex-col items-center pt-24 pb-16 px-4 md:px-6">
         
         {/* Badge */}
         <div className="group inline-flex cursor-pointer items-center rounded-full border border-zinc-200/50 dark:border-zinc-700/50 bg-white/40 dark:bg-zinc-900/40 backdrop-blur-md px-4 py-1.5 text-sm font-medium text-zinc-900 dark:text-zinc-200 transition-all hover:bg-white/60 dark:hover:bg-zinc-800/60 hover:shadow-md">
