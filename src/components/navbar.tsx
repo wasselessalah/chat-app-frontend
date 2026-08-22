@@ -5,15 +5,21 @@ import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 import { disconnectSocket } from "@/lib/socket";
+import { useState } from "react";
+import { Loader2 } from "lucide-react";
 
 export function Navbar() {
   const { data: session, isPending } = authClient.useSession();
   const router = useRouter();
 
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
   const handleLogout = async () => {
+    setIsLoggingOut(true);
     disconnectSocket();
     await authClient.signOut();
     router.push("/");
+    setIsLoggingOut(false);
   };
 
   return (
@@ -44,8 +50,9 @@ export function Navbar() {
           {isPending ? (
             <div className="h-9 w-20 animate-pulse bg-muted rounded-md" />
           ) : session ? (
-            <Button variant="outline" size="sm" onClick={handleLogout}>
-              Logout
+            <Button variant="outline" size="sm" onClick={handleLogout} disabled={isLoggingOut}>
+              {isLoggingOut ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              {isLoggingOut ? "Logging out..." : "Logout"}
             </Button>
           ) : (
             <>
