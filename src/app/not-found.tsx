@@ -23,18 +23,18 @@ export default function GlobalNotFound() {
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto pt-4">
-          <Button asChild variant="default" className="w-full sm:w-auto">
-            <Link href="/">
+          <Link href="/" className="w-full sm:w-auto">
+            <Button variant="default" className="w-full sm:w-auto">
               <Home className="mr-2 h-4 w-4" />
               Back to Home
-            </Link>
-          </Button>
-          <Button asChild variant="outline" className="w-full sm:w-auto">
-            <Link href="/chat">
+            </Button>
+          </Link>
+          <Link href="/chat" className="w-full sm:w-auto">
+            <Button variant="outline" className="w-full sm:w-auto">
               <ArrowLeft className="mr-2 h-4 w-4" />
               Go to Chat
-            </Link>
-          </Button>
+            </Button>
+          </Link>
         </div>
       </div>
     </div>

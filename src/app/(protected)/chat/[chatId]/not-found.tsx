@@ -20,12 +20,12 @@ export default function ChatNotFound() {
         </div>
 
         <div className="pt-2">
-          <Button asChild variant="default" className="w-full">
-            <Link href="/chat">
+          <Link href="/chat" className="w-full">
+            <Button variant="default" className="w-full">
               <ArrowLeft className="mr-2 h-4 w-4" />
               Return to Chat List
-            </Link>
-          </Button>
+            </Button>
+          </Link>
         </div>
       </div>
     </div>
