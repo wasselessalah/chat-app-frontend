@@ -13,6 +13,9 @@ export default function Home() {
 
       <Navbar />
       
+
+
+      
       <main className="relative z-10 flex-1 w-full flex flex-col items-center pt-24 pb-16 px-4 md:px-6">
         
         {/* Badge */}
