@@ -96,7 +96,7 @@ export default function SignInPage() {
             </div>
 
             <span className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-              YourApp
+              Chat App
             </span>
           </Link>
         </div>
