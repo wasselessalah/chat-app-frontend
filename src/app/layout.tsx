@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { JetBrains_Mono, Geist } from "next/font/google"
 import "./globals.css"
 import { cn } from "@/lib/utils";
+import { Footer } from "@/components/footer";
 
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
@@ -24,6 +25,7 @@ export default function RootLayout({
     <html lang="en" className={cn("font-sans", geist.variable)}>
       <body className={`${jetbrainsMono.variable} antialiased`}>
         {children}
+        <Footer/>
       </body>
     </html>
   )
