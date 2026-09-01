@@ -1,9 +1,25 @@
+
+"use client";
+
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Check, CheckCheck, Pencil, Trash2, Ban, Smile, X } from "lucide-react";
-import { EMOJIS, FIVE_MINUTES_MS } from "@/constants/chat.constants";
-import { Message, ChatUser } from "@/types/chat.types";
+import {
+  Ban,
+  Check,
+  CheckCheck,
+  Pencil,
+  Smile,
+  Trash2,
+  X,
+} from "lucide-react";
+
+import {
+  EMOJIS,
+  FIVE_MINUTES_MS,
+} from "@/constants/chat.constants";
+
+import { Message } from "@/types/chat.types";
 
 interface MessageItemProps {
   msg: Message;
@@ -18,37 +34,53 @@ interface MessageItemProps {
   editingText: string;
   activePickerId: string | null;
   currentUserId: string;
+
   onStartEdit: (msg: Message) => void;
   onSaveEdit: (messageId: string) => void;
   onCancelEdit: () => void;
   onDeleteMessage: (messageId: string) => void;
   onToggleReaction: (messageId: string, emoji: string) => void;
+
   setActivePickerId: (id: string | null) => void;
   setEditingText: (text: string) => void;
 }
 
-const parseReactions = (raw: any): { emoji: string; userId: string }[] => {
+const parseReactions = (
+  raw: any
+): { emoji: string; userId: string }[] => {
   if (Array.isArray(raw)) return raw;
+
   if (typeof raw === "string") {
     try {
       return JSON.parse(raw);
-    } catch (e) {
+    } catch {
       return [];
     }
   }
+
   return [];
 };
 
 const getGroupedReactions = (rawReactions: any) => {
   const reactionsList = parseReactions(rawReactions);
-  const grouped: { [emoji: string]: { count: number; userIds: string[] } } = {};
 
-  reactionsList.forEach((r) => {
-    if (!grouped[r.emoji]) {
-      grouped[r.emoji] = { count: 0, userIds: [] };
+  const grouped: {
+    [emoji: string]: {
+      count: number;
+      userIds: string[];
+    };
+  } = {};
+
+  reactionsList.forEach((reaction) => {
+    if (!grouped[reaction.emoji]) {
+      grouped[reaction.emoji] = {
+        count: 0,
+        userIds: [],
+      };
     }
-    grouped[r.emoji].count += 1;
-    grouped[r.emoji].userIds.push(r.userId);
+
+    grouped[reaction.emoji].count += 1;
+    grouped[reaction.emoji].userIds.push(reaction.userId);
   });
 
   return grouped;
@@ -56,6 +88,7 @@ const getGroupedReactions = (rawReactions: any) => {
 
 export function MessageItem({
   msg,
+  idx,
   isMe,
   senderName,
   senderAvatar,
@@ -66,56 +99,150 @@ export function MessageItem({
   editingText,
   activePickerId,
   currentUserId,
+
   onStartEdit,
   onSaveEdit,
   onCancelEdit,
   onDeleteMessage,
   onToggleReaction,
+
   setActivePickerId,
   setEditingText,
 }: MessageItemProps) {
-  const isDeleted = msg.isDeleted || msg.content === "This message was deleted";
-  
+  const isDeleted =
+    msg.isDeleted ||
+    msg.content === "This message was deleted";
+
   const isEditable =
     isMe &&
     !isDeleted &&
-    msg.createdAt &&
-    Date.now() - new Date(msg.createdAt).getTime() < FIVE_MINUTES_MS;
+    !!msg.createdAt &&
+    Date.now() - new Date(msg.createdAt).getTime() <
+      FIVE_MINUTES_MS;
 
-  const isEditingThis = editingMessageId === msg.id;
-  const isPickerOpen = activePickerId === msg.id;
+  const isEditingThis =
+    editingMessageId === msg.id;
+
+  const isPickerOpen =
+    activePickerId === msg.id;
+
+  const reactions = getGroupedReactions(
+    msg.reactions
+  );
+
+  const reactionKeys = Object.keys(reactions);
 
   return (
-    <div className={`group flex items-end gap-2 ${isMe ? "flex-row-reverse" : ""}`}>
+    <div
+      className={`
+        group/message
+        flex w-full items-end gap-2
+        ${isMe ? "flex-row-reverse" : ""}
+      `}
+    >
+      {/* Avatar */}
       {showAvatar ? (
-        <Avatar className="h-8 w-8 shrink-0">
-          <AvatarImage src={senderAvatar} alt={senderName} />
-          <AvatarFallback>{senderName.substring(0, 2).toUpperCase()}</AvatarFallback>
+        <Avatar className="h-8 w-8 shrink-0 ring-1 ring-border/40">
+          <AvatarImage
+            src={senderAvatar}
+            alt={senderName}
+          />
+
+          <AvatarFallback className="text-[11px] font-semibold">
+            {senderName
+              .substring(0, 2)
+              .toUpperCase()}
+          </AvatarFallback>
         </Avatar>
       ) : (
         <div className="w-8 shrink-0" />
       )}
-      <div className={`relative flex flex-col ${isMe ? "items-end" : "items-start"} max-w-[70%]`}>
-        {/* Reaction Bar */}
+
+      {/* Message column */}
+      <div
+        className={`
+          relative flex min-w-0 max-w-[78%] flex-col
+          sm:max-w-[70%]
+          ${isMe ? "items-end" : "items-start"}
+        `}
+      >
+        {/* Group sender */}
+        {!isMe && isGroup && (
+          <span
+            className="
+              mb-1 px-1
+              text-[11px]
+              font-semibold
+              text-primary
+            "
+          >
+            {msg.senderName || senderName}
+          </span>
+        )}
+
+        {/* Reaction picker */}
         {!isDeleted && !isEditingThis && (
           <div
-            className={`absolute -top-5 ${isMe ? "right-0" : "left-0"} ${
-              isPickerOpen ? "flex" : "hidden group-hover:flex"
-            } items-center gap-1 bg-background/95 backdrop-blur border shadow-md rounded-full px-2.5 py-1 z-20 max-w-[240px] overflow-x-auto overflow-y-hidden scrollbar-none whitespace-nowrap animate-in fade-in zoom-in duration-150`}
+            className={`
+              absolute
+              ${isMe ? "right-0" : "left-0"}
+              -top-10
+              z-30
+              ${isPickerOpen
+                ? "flex"
+                : "hidden group-hover/message:flex"
+              }
+              items-center
+              gap-0.5
+              rounded-full
+              border border-border/60
+              bg-background/95
+              px-1.5 py-1
+              shadow-lg
+              backdrop-blur-xl
+              animate-in
+              fade-in-0
+              zoom-in-95
+              duration-150
+            `}
           >
             {EMOJIS.map((emoji) => {
-              const reactionsList = parseReactions(msg.reactions);
-              const isMyReaction = reactionsList.some(
-                (r) => r.userId === currentUserId && r.emoji === emoji
-              );
+              const reactionsList =
+                parseReactions(msg.reactions);
+
+              const isMyReaction =
+                reactionsList.some(
+                  (reaction) =>
+                    reaction.userId === currentUserId &&
+                    reaction.emoji === emoji
+                );
+
               return (
                 <button
                   key={emoji}
-                  onClick={() => onToggleReaction(msg.id, emoji)}
-                  className={`hover:scale-125 transition-transform p-1 text-sm rounded-full shrink-0 ${
-                    isMyReaction ? "bg-primary/20 scale-110" : ""
-                  }`}
-                  title={`React with ${emoji}`}
+                  type="button"
+                  onClick={() =>
+                    onToggleReaction(
+                      msg.id,
+                      emoji
+                    )
+                  }
+                  aria-label={`React with ${emoji}`}
+                  className={`
+                    flex h-7 w-7
+                    items-center justify-center
+                    rounded-full
+                    text-base
+                    transition-all
+                    hover:scale-125
+                    hover:bg-muted
+                    active:scale-90
+                    ${
+                      isMyReaction
+                        ? "bg-primary/15 ring-1 ring-primary/30"
+                        : ""
+                    }
+                  `}
                 >
                   {emoji}
                 </button>
@@ -124,121 +251,353 @@ export function MessageItem({
           </div>
         )}
 
-        {/* Sender Name in Group Chat */}
-        {!isMe && isGroup && (
-          <span className="text-[11px] font-semibold text-primary mb-0.5 px-1">
-            {msg.senderName || senderName}
-          </span>
-        )}
-
+        {/* Message / Edit */}
         {isEditingThis ? (
-          <div className="flex items-center gap-2 bg-muted p-2 rounded-2xl border">
+          <div
+            className="
+              flex w-full items-center gap-1.5
+              rounded-2xl
+              border border-primary/30
+              bg-background
+              p-1.5
+              shadow-md
+              ring-2 ring-primary/5
+            "
+          >
             <Input
               value={editingText}
-              onChange={(e) => setEditingText(e.target.value)}
+              onChange={(e) =>
+                setEditingText(e.target.value)
+              }
               onKeyDown={(e) => {
-                if (e.key === "Enter") onSaveEdit(msg.id);
-                if (e.key === "Escape") onCancelEdit();
+                if (
+                  e.key === "Enter" &&
+                  !e.shiftKey
+                ) {
+                  e.preventDefault();
+                  onSaveEdit(msg.id);
+                }
+
+                if (e.key === "Escape") {
+                  onCancelEdit();
+                }
               }}
-              className="h-8 text-sm bg-background"
               autoFocus
+              className="
+                h-9
+                border-0
+                bg-transparent
+                text-sm
+                shadow-none
+                focus-visible:ring-0
+              "
+              placeholder="Edit message..."
             />
-            <Button size="icon" variant="ghost" className="h-7 w-7 text-green-600 hover:text-green-700" onClick={() => onSaveEdit(msg.id)}>
-              <Check className="w-4 h-4" />
+
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              onClick={() =>
+                onSaveEdit(msg.id)
+              }
+              className="
+                h-8 w-8
+                shrink-0
+                rounded-lg
+                text-emerald-600
+                hover:bg-emerald-500/10
+                hover:text-emerald-600
+              "
+              aria-label="Save message"
+            >
+              <Check className="h-4 w-4" />
             </Button>
-            <Button size="icon" variant="ghost" className="h-7 w-7 text-red-500 hover:text-red-600" onClick={onCancelEdit}>
-              <X className="w-4 h-4" />
+
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              onClick={onCancelEdit}
+              className="
+                h-8 w-8
+                shrink-0
+                rounded-lg
+                text-muted-foreground
+                hover:bg-muted
+                hover:text-foreground
+              "
+              aria-label="Cancel editing"
+            >
+              <X className="h-4 w-4" />
             </Button>
           </div>
         ) : isDeleted ? (
-          <div className={`relative group/msg px-4 py-2 rounded-2xl border ${
-              isMe ? "bg-muted/40 text-muted-foreground rounded-br-sm border-dashed" : "bg-muted/40 text-muted-foreground rounded-bl-sm border-dashed"
-            }`}
+          /* Deleted message */
+          <div
+            className={`
+              flex items-center gap-2
+              rounded-2xl
+              border
+              border-dashed
+              border-border/70
+              bg-muted/40
+              px-4 py-2.5
+              text-muted-foreground
+              ${
+                isMe
+                  ? "rounded-br-md"
+                  : "rounded-bl-md"
+              }
+            `}
           >
-            <p className="text-sm italic flex items-center gap-1.5 text-muted-foreground select-none">
-              <Ban className="w-3.5 h-3.5 shrink-0 text-muted-foreground/70" />
-              <span>This message was deleted</span>
-            </p>
+            <Ban className="h-3.5 w-3.5 shrink-0 opacity-60" />
+
+            <span className="text-sm italic">
+              This message was deleted
+            </span>
           </div>
         ) : (
-          <div className={`relative group/msg px-4 py-2 rounded-2xl ${
-              isMe ? `${themeColorClass} rounded-br-sm` : "bg-muted rounded-bl-sm"
-            }`}
+          /* Normal message */
+          <div
+            className={`
+              relative
+              px-3.5 py-2.5
+              text-sm
+              leading-relaxed
+              shadow-sm
+              transition-shadow
+              group-hover/message:shadow-md
+              ${
+                isMe
+                  ? `${themeColorClass} rounded-2xl rounded-br-md`
+                  : "rounded-2xl rounded-bl-md bg-muted"
+              }
+            `}
           >
-            <p className="text-sm">{msg.content}</p>
+            <p
+              className="
+                whitespace-pre-wrap
+                break-words
+                [overflow-wrap:anywhere]
+              "
+            >
+              {msg.content}
+            </p>
           </div>
         )}
 
-        {/* Reaction Badges */}
-        {!isDeleted && (
-          <>
-            {(() => {
-              const grouped = getGroupedReactions(msg.reactions);
-              const emojiKeys = Object.keys(grouped);
-              if (emojiKeys.length === 0) return null;
+        {/* Reactions */}
+        {!isDeleted &&
+          reactionKeys.length > 0 && (
+            <div
+              className={`
+                -mt-1.5
+                z-10
+                flex flex-wrap gap-1
+                ${
+                  isMe
+                    ? "justify-end"
+                    : "justify-start"
+                }
+              `}
+            >
+              {reactionKeys.map((emoji) => {
+                const reaction =
+                  reactions[emoji];
 
-              return (
-                <div className={`flex flex-wrap gap-1 mt-1 ${isMe ? "justify-end" : "justify-start"}`}>
-                  {emojiKeys.map((emoji) => {
-                    const item = grouped[emoji];
-                    const isMyReaction = item.userIds.includes(currentUserId);
-                    return (
-                      <button
-                        key={emoji}
-                        onClick={() => onToggleReaction(msg.id, emoji)}
-                        className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border transition-all ${
-                          isMyReaction ? "bg-primary/15 border-primary/40 text-primary font-medium shadow-xs" : "bg-muted/60 hover:bg-muted border-border/60 text-muted-foreground"
-                        }`}
-                        title={`${item.count} reaction${item.count > 1 ? "s" : ""}`}
-                      >
-                        <span>{emoji}</span>
-                        <span>{item.count}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              );
-            })()}
-          </>
-        )}
+                const isMyReaction =
+                  reaction.userIds.includes(
+                    currentUserId
+                  );
 
-        <div className="flex items-center gap-1 mt-1 px-1">
-          {!isDeleted && !isEditingThis && (
-            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              <button
-                onClick={() => setActivePickerId(isPickerOpen ? null : msg.id)}
-                className="p-0.5 hover:bg-muted rounded text-muted-foreground transition-colors"
-                title="React to message"
-              >
-                <Smile className="w-3 h-3" />
-              </button>
-              {isEditable && (
-                <>
+                return (
                   <button
-                    onClick={() => onStartEdit(msg)}
-                    className="p-0.5 hover:bg-muted rounded text-muted-foreground transition-colors"
-                    title="Edit message (< 5 mins)"
+                    key={emoji}
+                    type="button"
+                    onClick={() =>
+                      onToggleReaction(
+                        msg.id,
+                        emoji
+                      )
+                    }
+                    title={`${reaction.count} reaction${
+                      reaction.count > 1
+                        ? "s"
+                        : ""
+                    }`}
+                    className={`
+                      inline-flex
+                      h-6
+                      items-center
+                      gap-1
+                      rounded-full
+                      border
+                      px-2
+                      text-[11px]
+                      shadow-sm
+                      transition-all
+                      hover:-translate-y-0.5
+                      hover:shadow-md
+                      active:scale-95
+                      ${
+                        isMyReaction
+                          ? "border-primary/40 bg-primary/10 text-primary"
+                          : "border-border/60 bg-background/90 text-muted-foreground hover:bg-muted"
+                      }
+                    `}
                   >
-                    <Pencil className="w-3 h-3" />
+                    <span className="text-sm leading-none">
+                      {emoji}
+                    </span>
+
+                    <span className="font-medium">
+                      {reaction.count}
+                    </span>
                   </button>
-                  <button
-                    onClick={() => onDeleteMessage(msg.id)}
-                    className="p-0.5 hover:bg-red-500/10 hover:text-red-500 rounded text-muted-foreground transition-colors"
-                    title="Delete message (< 5 mins)"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                </>
-              )}
+                );
+              })}
             </div>
           )}
+
+        {/* Message metadata + actions */}
+        <div
+          className={`
+            mt-1
+            flex min-h-5
+            items-center gap-1.5
+            px-1
+            ${
+              isMe
+                ? "flex-row-reverse"
+                : "flex-row"
+            }
+          `}
+        >
+          {/* Actions */}
+          {!isDeleted &&
+            !isEditingThis && (
+              <div
+                className="
+                  flex items-center gap-0.5
+                  opacity-0
+                  transition-opacity
+                  group-hover/message:opacity-100
+                  group-focus-within/message:opacity-100
+                "
+              >
+                <button
+                  type="button"
+                  onClick={() =>
+                    setActivePickerId(
+                      isPickerOpen
+                        ? null
+                        : msg.id
+                    )
+                  }
+                  aria-label="React to message"
+                  title="React"
+                  className="
+                    flex h-6 w-6
+                    items-center justify-center
+                    rounded-md
+                    text-muted-foreground
+                    transition-colors
+                    hover:bg-muted
+                    hover:text-foreground
+                  "
+                >
+                  <Smile className="h-3.5 w-3.5" />
+                </button>
+
+                {isEditable && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onStartEdit(msg)
+                      }
+                      aria-label="Edit message"
+                      title="Edit"
+                      className="
+                        flex h-6 w-6
+                        items-center justify-center
+                        rounded-md
+                        text-muted-foreground
+                        transition-colors
+                        hover:bg-muted
+                        hover:text-foreground
+                      "
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onDeleteMessage(msg.id)
+                      }
+                      aria-label="Delete message"
+                      title="Delete"
+                      className="
+                        flex h-6 w-6
+                        items-center justify-center
+                        rounded-md
+                        text-muted-foreground
+                        transition-colors
+                        hover:bg-destructive/10
+                        hover:text-destructive
+                      "
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+
+          {/* Edited */}
           {msg.isEdited && !isDeleted && (
-            <span className="text-[10px] text-muted-foreground italic">(edited)</span>
+            <span
+              className="
+                text-[10px]
+                italic
+                text-muted-foreground
+              "
+            >
+              edited
+            </span>
           )}
-          <span className="text-[10px] text-muted-foreground">{msg.timestamp}</span>
+
+          {/* Timestamp */}
+          <span
+            className="
+              text-[10px]
+              tabular-nums
+              text-muted-foreground/80
+            "
+          >
+            {msg.timestamp}
+          </span>
+
+          {/* Read status */}
           {isMe && (
-            <span className="text-muted-foreground">
-              {msg.isRead ? <CheckCheck className="w-3 h-3 text-blue-500" /> : <Check className="w-3 h-3" />}
+            <span
+              className="
+                flex items-center
+                text-muted-foreground
+              "
+              aria-label={
+                msg.isRead
+                  ? "Read"
+                  : "Sent"
+              }
+            >
+              {msg.isRead ? (
+                <CheckCheck className="h-3.5 w-3.5 text-blue-500" />
+              ) : (
+                <Check className="h-3.5 w-3.5" />
+              )}
             </span>
           )}
         </div>
