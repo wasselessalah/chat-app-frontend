@@ -53,7 +53,7 @@ export default function GlobalNotFound() {
             </h2>
 
             <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-              The page you're looking for doesn't exist, has been moved, or is
+              The page you re looking for doesn t exist, has been moved, or is
               no longer available.
             </p>
           </div>
