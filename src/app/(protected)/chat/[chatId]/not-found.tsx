@@ -60,7 +60,7 @@ export default function ChatNotFound() {
             </h1>
 
             <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-              We couldn't find this conversation. It may have
+              We couldn t find this conversation. It may have
               been deleted, moved, or you may no longer have
               access to it.
             </p>
