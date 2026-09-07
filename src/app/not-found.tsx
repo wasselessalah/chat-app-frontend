@@ -1,4 +1,3 @@
-
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Ghost, Home, MessageSquare, ArrowLeft } from "lucide-react";
@@ -64,8 +63,8 @@ export default function GlobalNotFound() {
             </h2>
 
             <p className="mx-auto mt-3 max-w-[360px] text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-              The page you re looking for doesn t exist, has been moved, or is
-              no longer available.
+              The page you&apos;re looking for doesn&apos;t exist, has been
+              moved, or is no longer available.
             </p>
           </div>
 
@@ -93,14 +92,13 @@ export default function GlobalNotFound() {
 
           {/* Back link */}
           <div className="mt-6 flex justify-center">
-            <button
-              type="button"
-              onClick={() => window.history.back()}
+            <Link
+              href="/"
               className="group inline-flex items-center gap-1.5 text-xs font-medium text-zinc-400 transition-colors hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-300"
             >
               <ArrowLeft className="h-3.5 w-3.5 transition-transform duration-200 group-hover:-translate-x-0.5" />
-              Go back to previous page
-            </button>
+              Back to home
+            </Link>
           </div>
         </div>
 
